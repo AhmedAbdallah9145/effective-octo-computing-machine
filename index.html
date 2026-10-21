@@ -597,7 +597,7 @@
     <div class="field"><label>كلمة المرور</label><input id="login-password" type="password" class="text-input" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;justify-content:center" onclick="doLogin()">تسجيل الدخول</button>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center">الإصدار 1.2 — 21/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center">الإصدار 1.3 — 21/10/2026</div>
   </div>
 </div>
 
@@ -3821,7 +3821,10 @@ async function shareViaWhatsApp(orderId, kind, btn){
     try{ if(window.jspdf) blob = await captureElementAsPDF(html); }catch(err){ console.error('pdf failed', err); }
     if(!blob){ blob = await captureElementAsBlob(html); ext = 'png'; mime = 'image/png'; }   // fallback if the PDF library did not load
     if(!blob){ showToast('تعذر إنشاء الملف'); if(btn){btn.disabled=false; btn.textContent=originalLabel;} return; }
-    const fileName = titleSafeName(`${label} ${patientName(o.patientId)}`) + '.' + ext;
+    // Latin-only file name: WhatsApp garbles Arabic file names on some phones
+    const pt = state.patients.find(p=>p.id===o.patientId) || {};
+    const enName = String(pt.nameEn||'').replace(/[^A-Za-z0-9 ]/g,'').trim().replace(/\s+/g,'-');
+    const fileName = `Misk-Lab-${kind==='report'?'Report':'Invoice'}-${o.no||''}${enName?'-'+enName:''}-${(o.date||todayISO()).slice(0,10)}.${ext}`;
     const file = new File([blob], fileName, { type:mime });
     if(navigator.canShare && navigator.canShare({ files:[file] })){
       await navigator.share({ files:[file], title:'تقرير نتيجة تحليل', text: `${label} ${patientName(o.patientId)}` });
