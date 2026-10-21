@@ -1069,10 +1069,10 @@ async function maybeCreateDailySnapshot(){
   }catch(e){ console.error('daily snapshot failed', e); }
 }
 function exportBackup(){
-  const backup = {
-    patients: state.patients, tests: state.tests, orders: state.orders, settings: state.settings,
-    exportedAt: new Date().toISOString()
-  };
+  const backup = { exportedAt: new Date().toISOString() };
+  DATA_KEYS.forEach(k=>{ if(state[k]!==undefined) backup[k] = state[k]; });
+  try{ localStorage.setItem('labmgmt_last_local_backup', String(Date.now())); localStorage.removeItem('labmgmt_backup_snooze'); }catch(e){}
+  const bb = document.getElementById('backup-banner'); if(bb) bb.remove();
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1081,6 +1081,55 @@ function exportBackup(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('تم تنزيل النسخة الاحتياطية');
+}
+/* Weekly reminder (admin only) to download a backup copy to this device. */
+function maybeBackupReminder(){
+  try{
+    if(!currentUser || !isAdmin() || document.getElementById('backup-banner')) return;
+    const last = Number(localStorage.getItem('labmgmt_last_local_backup')||0);
+    const snooze = Number(localStorage.getItem('labmgmt_backup_snooze')||0);
+    const now = Date.now(), WEEK = 7*24*3600*1000;
+    if(now - last < WEEK || now < snooze) return;
+    const days = last ? Math.floor((now-last)/(24*3600*1000)) : null;
+    const b = document.createElement('div');
+    b.id = 'backup-banner';
+    b.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:70;background:#0E5E59;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 32px);font-size:13.5px';
+    b.innerHTML = `<span>💾 ${days==null?'لم يتم تنزيل نسخة احتياطية على هذا الجهاز بعد':`مرّ ${days} يوم على آخر نسخة احتياطية على هذا الجهاز`}</span>
+      <button class="btn btn-sm" style="background:#fff;color:#0E5E59;font-weight:800" onclick="exportBackup()">⬇ تنزيل الآن</button>
+      <button class="btn btn-sm" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)" onclick="try{localStorage.setItem('labmgmt_backup_snooze', String(Date.now()+24*3600*1000))}catch(e){}; this.parentElement.remove()">لاحقاً</button>`;
+    document.body.appendChild(b);
+  }catch(e){}
+}
+/* Restore from one of the automatic daily cloud snapshots (snapshot_YYYY-MM-DD). */
+async function openCloudSnapshots(){
+  const mb = document.getElementById('modal-box');
+  let rows = [];
+  try{
+    const { data, error } = await sb.from('lab_data').select('key, updated_at').like('key','snapshot_%').order('key', { ascending:false }).limit(30);
+    if(error) throw error; rows = data || [];
+  }catch(e){ showToast('تعذر الوصول للنسخ السحابية — تأكد من الاتصال بالإنترنت'); return; }
+  mb.className = 'modal';
+  mb.innerHTML = `<div class="modal-head"><h3>النسخ الاحتياطية التلقائية على السحابة</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px">النظام يحفظ نسخة كاملة على السحابة تلقائياً كل يوم. الاسترجاع يستبدل البيانات الحالية بنسخة ذلك اليوم — نزّل نسخة احتياطية من الوضع الحالي أولاً.</div>
+      ${rows.length ? rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+        <strong dir="ltr">${escapeHtml(r.key.replace('snapshot_',''))}</strong>
+        <button class="btn btn-outline btn-sm" onclick="restoreCloudSnapshot('${escapeHtml(r.key)}')">استرجاع هذه النسخة</button></div>`).join('') : '<div>لا توجد نسخ سحابية بعد.</div>'}
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="exportBackup()">⬇ تنزيل نسخة من الوضع الحالي</button><button class="btn btn-ghost" onclick="closeModal()">إغلاق</button></div>`;
+  openModal();
+}
+async function restoreCloudSnapshot(key){
+  if(!confirm('سيتم استبدال جميع البيانات الحالية بنسخة ' + key.replace('snapshot_','') + '.\nهل أنت متأكد؟')) return;
+  try{
+    const { data, error } = await sb.from('lab_data').select('value').eq('key', key).maybeSingle();
+    if(error || !data || !data.value) throw error || new Error('empty');
+    const v = data.value;
+    ['patients','tests','orders','expenses','insurance','settings'].forEach(k=>{ if(v[k]!==undefined){ state[k] = v[k]; save(k); } });
+    closeModal(); applySettingsToHeader(); renderPage();
+    showToast('تم استرجاع نسخة ' + key.replace('snapshot_',''));
+    logAudit('استرجاع نسخة سحابية', key);
+  }catch(e){ showToast('تعذر استرجاع النسخة'); }
 }
 function safeFileNameGeneric(s){ return String(s).replace(/[^\u0600-\u06FFa-zA-Z0-9\- ]/g,'').trim().replace(/\s+/g,'-') || 'مختبر'; }
 function importBackupFile(input){
@@ -1091,11 +1140,7 @@ function importBackupFile(input){
     try{
       const data = JSON.parse(e.target.result);
       if(!confirm('سيتم استبدال جميع البيانات الحالية بالنسخة المستوردة. هل أنت متأكد؟')) { input.value=''; return; }
-      if(data.patients) state.patients = data.patients;
-      if(data.tests) state.tests = data.tests;
-      if(data.orders) state.orders = data.orders;
-      if(data.settings) state.settings = data.settings;
-      save('patients'); save('tests'); save('orders'); save('settings');
+      DATA_KEYS.forEach(k=>{ if(data[k]!==undefined){ state[k] = data[k]; save(k); } });
       closeModal();
       applySettingsToHeader();
       renderPage();
@@ -3168,6 +3213,7 @@ function openSettingsModal(){
         <label style="display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px">النسخ الاحتياطي — احفظ نسخة من بياناتك بشكل دوري لتجنب فقدانها</label>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button type="button" class="btn btn-outline btn-sm" onclick="exportBackup()">⬇ تنزيل نسخة احتياطية الآن</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="openCloudSnapshots()">☁ النسخ التلقائية على السحابة</button>
           <label class="btn btn-outline btn-sm" style="cursor:pointer">
             ⬆ استيراد نسخة احتياطية
             <input type="file" accept=".json" style="display:none" onchange="importBackupFile(this)">
@@ -3840,6 +3886,7 @@ async function showApp(){
   renderPage();
   syncPending();
   maybeCreateDailySnapshot();
+  setTimeout(maybeBackupReminder, 4000);
 }
 
 async function doLogin(){
