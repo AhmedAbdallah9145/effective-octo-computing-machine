@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.8 — 22/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.9 — 22/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -597,7 +597,7 @@
     <div class="field"><label>كلمة المرور</label><input id="login-password" type="password" class="text-input" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;justify-content:center" onclick="doLogin()">تسجيل الدخول</button>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.8 — 22/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.9 — 22/10/2026</div>
   </div>
 </div>
 
@@ -670,6 +670,7 @@ let state = {
   orders: [],
   expenses: [],
   insurance: [],
+  inventory: [],
   auditLog: [],
   userRoles: {},
   users: [],
@@ -780,6 +781,7 @@ const NAV_ITEMS = [
   { key:'dashboard', label:'لوحة التحكم', icon:`<path d="M3 3h8v8H3V3Z"/><path d="M13 3h8v5h-8V3Z"/><path d="M13 11h8v10h-8V11Z"/><path d="M3 14h8v7H3v-7Z"/>` },
   { key:'patients',  label:'المرضى',      icon:`<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>` },
   { key:'tests',     label:'دليل التحاليل', icon:`<path d="M9 2v6.5L4.5 17a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2"/><path d="M7.5 14h9"/>` },
+  { key:'inventory', label:'المخزون والكيتات', icon:`<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/>` },
   { key:'orders',    label:'الطلبات والنتائج', icon:`<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M8 11h8M8 15h5"/>` },
   { key:'billing',   label:'الفواتير',    icon:`<path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 8h6M9 12h6"/>` },
   { key:'reports',   label:'التقارير والإحصائيات', icon:`<path d="M4 20V10M11 20V4M18 20v-7"/>` },
@@ -791,7 +793,7 @@ const SUPABASE_KEY = 'sb_publishable_sFGky8zOF4nx67VOc4PLWQ_-xJqUFJX';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const LS_PREFIX = 'labmgmt_';
 const PENDING_PREFIX = 'labmgmt_pending_';
-const DATA_KEYS = ['patients','tests','orders','expenses','insurance','auditLog','userRoles','settings','users'];
+const DATA_KEYS = ['patients','tests','orders','expenses','insurance','inventory','auditLog','userRoles','settings','users'];
 let cloudConnected = false;
 
 function markPending(key){ localStorage.setItem(PENDING_PREFIX+key, '1'); }
@@ -865,7 +867,7 @@ async function loadState(){
 
 /* ===== Cloud sync with 3-way merge (safe for several devices) ===== */
 const BASE_PREFIX = 'labmgmt_base_';
-const ARRAY_KEYS = { patients:'id', tests:'id', orders:'id', expenses:'id', insurance:'id', users:'username' };
+const ARRAY_KEYS = { patients:'id', tests:'id', orders:'id', expenses:'id', insurance:'id', inventory:'id', users:'username' };
 const cloudStamp = {};      // key -> ms timestamp of the cloud row we last saw / wrote
 const saveQueue = {};       // key -> promise chain (saves of one key run one after another)
 const saveCount = {};       // key -> number of saves queued / running
@@ -1067,7 +1069,7 @@ async function maybeCreateDailySnapshot(){
     if(!data){
       const snapshot = {
         patients: state.patients, tests: state.tests, orders: state.orders,
-        expenses: state.expenses, insurance: state.insurance, settings: state.settings,
+        expenses: state.expenses, insurance: state.insurance, inventory: state.inventory, settings: state.settings,
         capturedAt: new Date().toISOString()
       };
       await sb.from('lab_data').upsert({ key, value: snapshot, updated_at: new Date().toISOString() });
@@ -1132,7 +1134,7 @@ async function restoreCloudSnapshot(key){
     const { data, error } = await sb.from('lab_data').select('value').eq('key', key).maybeSingle();
     if(error || !data || !data.value) throw error || new Error('empty');
     const v = data.value;
-    ['patients','tests','orders','expenses','insurance','settings'].forEach(k=>{ if(v[k]!==undefined){ state[k] = v[k]; save(k); } });
+    ['patients','tests','orders','expenses','insurance','inventory','settings'].forEach(k=>{ if(v[k]!==undefined){ state[k] = v[k]; save(k); } });
     closeModal(); applySettingsToHeader(); renderPage();
     showToast('تم استرجاع نسخة ' + key.replace('snapshot_',''));
     logAudit('استرجاع نسخة سحابية', key);
@@ -1487,10 +1489,12 @@ function renderNav(){
     if(it.key === 'reports' && !canViewRevenue()) return false;
     return true;
   });
+  const invN = it => it.key==='inventory' ? inventoryAlerts().length : 0;
   nav.innerHTML = visibleItems.map(it => `
     <div class="nav-item ${currentTab===it.key?'active':''}" onclick="switchTab('${it.key}')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${it.icon}</svg>
       ${it.label}
+      ${invN(it) ? `<span style="margin-inline-start:auto;background:var(--danger);color:#fff;border-radius:999px;font-size:11px;font-weight:800;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px">${invN(it)}</span>` : ''}
     </div>`).join('');
 }
 function switchTab(key){
@@ -1512,6 +1516,7 @@ function renderPage(){
   if(currentTab==='dashboard') return renderDashboard();
   if(currentTab==='patients') return renderPatients();
   if(currentTab==='tests') return renderTests();
+  if(currentTab==='inventory') return renderInventory();
   if(currentTab==='orders') return renderOrders();
   if(currentTab==='billing') return renderBilling();
   if(currentTab==='reports') return renderReports();
@@ -1529,7 +1534,7 @@ function renderDashboard(){
 
   const recent = [...state.orders].sort((a,b)=> b.date.localeCompare(a.date)).slice(0,6);
 
-  document.getElementById('content').innerHTML = `
+  document.getElementById('content').innerHTML = inventoryBannerHTML() + `
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-body"><div class="label">مرضى مسجلون</div><div class="value">${state.patients.length}</div><div class="foot">إجمالي عدد المرضى</div></div>
@@ -1575,6 +1580,230 @@ function renderDashboard(){
       </div>
     </div>
   `;
+}
+
+/* ===================== INVENTORY (kits & reagents) ===================== */
+const INV_UNITS = ['فحص','علبة','مل','قطعة','شريط'];
+function invAlertDays(){ const d = Number(state.settings && state.settings.invAlertDays); return d>0 ? d : 30; }
+function daysUntil(iso){
+  if(!iso) return null;
+  const a = new Date(todayISO()+'T00:00:00'), b = new Date(String(iso).slice(0,10)+'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+/* status of one kit: expired / soon / low / ok (worst first) */
+function invStatus(it){
+  const d = daysUntil(it.expiry), q = Number(it.qty)||0, min = Number(it.minQty)||0;
+  if(q <= 0) return { key:'empty', label:'نفد', color:'var(--danger)', bg:'var(--danger-light)', rank:1, days:d };
+  if(d!=null && d < 0) return { key:'expired', label:'منتهي الصلاحية', color:'#fff', bg:'var(--danger)', rank:0, days:d };
+  if(d!=null && d <= invAlertDays()) return { key:'soon', label:'قارب على الانتهاء', color:'var(--accent)', bg:'var(--accent-light)', rank:2, days:d };
+  if(min>0 && q <= min) return { key:'low', label:'الكمية قليلة', color:'#8A6D00', bg:'#FFF4CC', rank:3, days:d };
+  return { key:'ok', label:'صالح', color:'var(--success)', bg:'var(--success-light)', rank:9, days:d };
+}
+function inventoryAlerts(){
+  return (state.inventory||[]).filter(it=>!it.archived).map(it=>({ it, st: invStatus(it) })).filter(x=>x.st.key!=='ok')
+    .sort((a,b)=> a.st.rank-b.st.rank || (a.st.days??9999)-(b.st.days??9999));
+}
+function expiryText(d){
+  if(d==null) return '—';
+  if(d < 0) return `منتهي منذ ${-d} يوم`;
+  if(d === 0) return 'ينتهي اليوم';
+  if(d === 1) return 'ينتهي غداً';
+  return `بعد ${d} يوم`;
+}
+function inventoryBannerHTML(){
+  const al = inventoryAlerts(); if(!al.length) return '';
+  const rows = al.slice(0,5).map(({it,st})=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(0,0,0,.06)">
+      <span class="badge" style="background:${st.bg};color:${st.color};min-width:118px;justify-content:center">${st.label}</span>
+      <strong dir="ltr">${escapeHtml(it.name)}</strong>${it.lot?`<span style="font-size:12px;color:var(--ink-soft)" dir="ltr">Lot ${escapeHtml(it.lot)}</span>`:''}
+      <span style="margin-inline-start:auto;font-size:12.5px;color:var(--ink-soft)">${st.key==='low'||st.key==='empty' ? `متبقي ${Number(it.qty)||0} ${escapeHtml(it.unit||'')}` : expiryText(st.days)}</span></div>`).join('');
+  return `<div class="card" style="border:1.5px solid var(--danger);margin-bottom:16px">
+    <div class="card-head" style="background:var(--danger-light)"><h3 style="color:var(--danger)">⚠️ تنبيهات المخزون (${al.length})</h3>
+      <span style="cursor:pointer;font-size:13px;font-weight:700;color:var(--primary)" onclick="switchTab('inventory')">فتح المخزون ←</span></div>
+    <div class="card-body" style="padding:8px 18px">${rows}${al.length>5?`<div style="font-size:12px;color:var(--ink-soft);padding-top:6px">و ${al.length-5} تنبيهات أخرى…</div>`:''}</div></div>`;
+}
+let invFilter = 'all', invSearch = '';
+function renderInventory(){
+  setTopbar('المخزون والكيتات', 'تواريخ الانتهاء والكميات — النظام ينقص الكمية تلقائياً عند حفظ نتائج التحاليل المرتبطة', `<button class="btn btn-primary" onclick="openKitModal()">+ إضافة كيت / كاشف</button>`);
+  const all = (state.inventory||[]).filter(it=>!it.archived).map(it=>({ it, st: invStatus(it) }));
+  const cnt = k => all.filter(x=>x.st.key===k).length;
+  const q = invSearch.trim().toLowerCase();
+  let list = all.filter(x => invFilter==='all' || (invFilter==='alerts' ? x.st.key!=='ok' : x.st.key===invFilter));
+  if(q) list = list.filter(x => (x.it.name+' '+(x.it.lot||'')+' '+(x.it.testIds||[]).map(id=>testDisplayName(testById(id))).join(' ')).toLowerCase().includes(q));
+  list.sort((a,b)=> a.st.rank-b.st.rank || (a.st.days??9999)-(b.st.days??9999) || a.it.name.localeCompare(b.it.name));
+  const chip = (k,label,n) => `<button class="btn btn-sm ${invFilter===k?'btn-primary':'btn-outline'}" onclick="invFilter='${k}';renderInventory()">${label}${n!=null?` (${n})`:''}</button>`;
+  const stat = (label, n, cls, foot) => `<div class="stat-card ${cls}"><div class="stat-body"><div class="label">${label}</div><div class="value">${n}</div><div class="foot">${foot}</div></div></div>`;
+  document.getElementById('content').innerHTML = `
+    <div class="stats-grid">
+      ${stat('كيتات مسجلة', all.length, '', 'إجمالي المواد بالمخزون')}
+      ${stat('منتهية الصلاحية', cnt('expired'), cnt('expired')?'stat-danger':'', 'لا تُستخدم')}
+      ${stat('قاربت على الانتهاء', cnt('soon'), cnt('soon')?'stat-amber':'', `خلال ${invAlertDays()} يوم`)}
+      ${stat('كمية قليلة أو نفدت', cnt('low')+cnt('empty'), (cnt('low')+cnt('empty'))?'stat-amber':'', 'تحتاج طلب جديد')}
+    </div>
+    <div class="card"><div class="card-body">
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <input class="search-input" placeholder="بحث باسم الكيت أو رقم التشغيلة أو التحليل..." value="${escapeHtml(invSearch)}" oninput="invSearch=this.value;renderInventory();this.focus();this.setSelectionRange(this.value.length,this.value.length)">
+        ${chip('all','الكل',all.length)} ${chip('alerts','التنبيهات فقط',all.filter(x=>x.st.key!=='ok').length)}
+        <span style="margin-inline-start:auto;font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px">نبّهني قبل الانتهاء بـ
+          <input type="number" min="1" max="365" value="${invAlertDays()}" style="width:64px" class="text-input" onchange="setInvAlertDays(this.value)"> يوم</span>
+      </div>
+      <table>
+        <thead><tr><th>الكيت / الكاشف</th><th>رقم التشغيلة</th><th>تاريخ الانتهاء</th><th>الكمية</th><th>الحالة</th><th></th></tr></thead>
+        <tbody>
+        ${list.length ? list.map(({it,st})=>{
+          const linked = (it.testIds||[]).map(id=>testById(id)).filter(Boolean);
+          const q0 = Number(it.qty)||0, start = Number(it.startQty)||q0||1, pct = Math.max(0, Math.min(100, Math.round(q0/start*100)));
+          return `<tr>
+            <td><div style="font-weight:800" dir="ltr">${escapeHtml(it.name)}</div>
+              ${linked.length?`<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px" dir="ltr">🔗 ${linked.map(t=>escapeHtml(testDisplayName(t))).join('، ')}</div>`:`<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">غير مرتبط بتحليل — لا ينقص تلقائياً</div>`}</td>
+            <td dir="ltr">${escapeHtml(it.lot||'—')}</td>
+            <td><div>${it.expiry?fmtDate(it.expiry):'—'}</div><div style="font-size:11.5px;color:${st.key==='expired'?'var(--danger)':st.key==='soon'?'var(--accent)':'var(--ink-soft)'};font-weight:700">${expiryText(st.days)}</div></td>
+            <td style="min-width:150px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <button class="btn btn-ghost btn-sm" title="إنقاص 1" onclick="adjustKit('${it.id}',-1)">−</button>
+                <strong class="num">${q0}</strong> <span style="font-size:12px;color:var(--ink-soft)">${escapeHtml(it.unit||'')}</span>
+                <button class="btn btn-ghost btn-sm" title="زيادة 1" onclick="adjustKit('${it.id}',1)">+</button>
+              </div>
+              <div style="height:5px;background:var(--line);border-radius:4px;margin-top:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${st.key==='ok'?'var(--success)':st.color==='#fff'?'var(--danger)':st.color}"></div></div>
+            </td>
+            <td><span class="badge" style="background:${st.bg};color:${st.color}">${st.label}</span></td>
+            <td><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openKitModal('${it.id}')">تعديل</button>
+              <button class="btn btn-ghost btn-sm" onclick="openKitHistory('${it.id}')">السجل</button>
+              ${isAdmin()?`<button class="btn btn-danger btn-sm" onclick="deleteKit('${it.id}')">حذف</button>`:''}
+            </div></td></tr>`; }).join('')
+          : `<tr class="empty-row"><td colspan="6">${all.length?'لا توجد نتائج':'لا يوجد كيتات مسجلة بعد — اضغط "+ إضافة كيت / كاشف"'}</td></tr>`}
+        </tbody>
+      </table>
+    </div></div>`;
+}
+async function setInvAlertDays(v){
+  const n = Math.max(1, Math.min(365, parseInt(v)||30));
+  state.settings.invAlertDays = n; await save('settings');
+  renderNav(); renderInventory(); showToast(`سيتم التنبيه قبل الانتهاء بـ ${n} يوم`);
+}
+function kitLog(it, text, delta){
+  it.log = it.log || [];
+  it.log.unshift({ ts: new Date().toISOString(), user: currentUserEmail || '', text, delta: delta||0, qty: Number(it.qty)||0 });
+  if(it.log.length > 200) it.log = it.log.slice(0,200);
+}
+function openKitModal(id){
+  const it = id ? (state.inventory||[]).find(x=>x.id===id) : null;
+  const sel = new Set(it ? (it.testIds||[]) : []);
+  const tests = [...state.tests].filter(t=>!(Array.isArray(t.panel)&&t.panel.length)).sort((a,b)=>testDisplayName(a).localeCompare(testDisplayName(b)));
+  const mb = document.getElementById('modal-box'); mb.className = 'modal';
+  mb.innerHTML = `
+    <div class="modal-head"><h3>${it?'تعديل كيت':'إضافة كيت / كاشف'}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>اسم الكيت / الكاشف *</label><input class="text-input" id="kf-name" dir="ltr" style="text-align:left" value="${it?escapeHtml(it.name):''}" placeholder="e.g. TSH ELISA Kit"></div>
+      <div class="field-row">
+        <div class="field"><label>رقم التشغيلة (Lot)</label><input class="text-input" id="kf-lot" dir="ltr" value="${it?escapeHtml(it.lot||''):''}"></div>
+        <div class="field"><label>تاريخ الانتهاء *</label><input class="text-input" id="kf-exp" type="date" value="${it&&it.expiry?it.expiry.slice(0,10):''}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>الكمية الموجودة *</label><input class="text-input" id="kf-qty" type="number" min="0" step="1" value="${it?Number(it.qty)||0:''}" placeholder="مثال: 96"></div>
+        <div class="field"><label>الوحدة</label><select class="select-input" id="kf-unit">${INV_UNITS.map(u=>`<option ${it&&it.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>نبّهني لما تنزل الكمية لـ</label><input class="text-input" id="kf-min" type="number" min="0" step="1" value="${it&&it.minQty!=null?it.minQty:''}" placeholder="مثال: 10"></div>
+        <div class="field"><label>كم وحدة يستهلك التحليل الواحد</label><input class="text-input" id="kf-per" type="number" min="0" step="any" value="${it&&it.perTest!=null?it.perTest:1}"></div>
+      </div>
+      <div class="field">
+        <label>التحاليل التي تستخدم هذا الكيت (للإنقاص التلقائي عند حفظ النتيجة)</label>
+        <input class="text-input" dir="ltr" placeholder="Search tests... e.g. TSH" oninput="filterKitTests(this.value)" style="margin-bottom:6px">
+        <div id="kf-tests" style="max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+          ${tests.map(t=>`<label class="kf-test" data-n="${escapeHtml(_normSearch(testDisplayName(t)+' '+t.name))}" style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:13px" dir="ltr">
+            <input type="checkbox" value="${t.id}" ${sel.has(t.id)?'checked':''}> ${escapeHtml(testDisplayName(t))} <span style="font-size:11px;color:var(--ink-soft)">${escapeHtml(t.category||'')}</span></label>`).join('')}
+        </div>
+      </div>
+      <div class="field"><label>ملاحظات</label><input class="text-input" id="kf-notes" value="${it?escapeHtml(it.notes||''):''}" placeholder="المورّد، مكان التخزين، درجة الحرارة..."></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button><button class="btn btn-primary" onclick="saveKit(${it?`'${it.id}'`:'null'})">حفظ</button></div>`;
+  openModal();
+}
+function filterKitTests(v){
+  const q = _normSearch(v);
+  document.querySelectorAll('#kf-tests .kf-test').forEach(el=>{ el.style.display = (!q || el.dataset.n.includes(q)) ? 'flex' : 'none'; });
+}
+async function saveKit(id){
+  const name = document.getElementById('kf-name').value.trim();
+  const expiry = document.getElementById('kf-exp').value;
+  const qtyRaw = document.getElementById('kf-qty').value;
+  if(!name || !expiry || qtyRaw===''){ showToast('اكتب اسم الكيت وتاريخ الانتهاء والكمية'); return; }
+  const qty = Math.max(0, parseFloat(qtyRaw)||0);
+  const data = {
+    name, expiry, qty,
+    lot: document.getElementById('kf-lot').value.trim(),
+    unit: document.getElementById('kf-unit').value,
+    minQty: document.getElementById('kf-min').value==='' ? null : Math.max(0, parseFloat(document.getElementById('kf-min').value)||0),
+    perTest: document.getElementById('kf-per').value==='' ? 1 : Math.max(0, parseFloat(document.getElementById('kf-per').value)||0),
+    testIds: [...document.querySelectorAll('#kf-tests input:checked')].map(x=>x.value),
+    notes: document.getElementById('kf-notes').value.trim()
+  };
+  state.inventory = state.inventory || [];
+  if(id){
+    const it = state.inventory.find(x=>x.id===id); if(!it) return;
+    const before = Number(it.qty)||0;
+    Object.assign(it, data);
+    if(qty !== before){ if(qty > before) it.startQty = Math.max(Number(it.startQty)||0, qty); kitLog(it, 'تعديل الكمية يدوياً', qty-before); }
+    else kitLog(it, 'تعديل بيانات الكيت', 0);
+  } else {
+    const it = Object.assign({ id: uid(), createdAt: new Date().toISOString(), startQty: qty }, data);
+    kitLog(it, 'إضافة الكيت للمخزون', qty);
+    state.inventory.push(it);
+  }
+  await save('inventory');
+  closeModal(); renderNav(); renderInventory(); showToast('تم حفظ الكيت');
+  logAudit(id?'تعديل كيت':'إضافة كيت', name);
+}
+async function adjustKit(id, delta){
+  const it = (state.inventory||[]).find(x=>x.id===id); if(!it) return;
+  const nq = Math.max(0, (Number(it.qty)||0) + delta);
+  if(nq === (Number(it.qty)||0)) return;
+  it.qty = nq; if(nq > (Number(it.startQty)||0)) it.startQty = nq;
+  kitLog(it, delta<0 ? 'استهلاك يدوي' : 'إضافة يدوية', delta);
+  await save('inventory'); renderNav(); renderInventory();
+}
+async function deleteKit(id){
+  const it = (state.inventory||[]).find(x=>x.id===id); if(!it) return;
+  if(!confirm(`حذف ${it.name} من المخزون؟`)) return;
+  state.inventory = state.inventory.filter(x=>x.id!==id);
+  await save('inventory'); renderNav(); renderInventory(); showToast('تم الحذف');
+  logAudit('حذف كيت', it.name);
+}
+function openKitHistory(id){
+  const it = (state.inventory||[]).find(x=>x.id===id); if(!it) return;
+  const mb = document.getElementById('modal-box'); mb.className = 'modal';
+  mb.innerHTML = `<div class="modal-head"><h3>سجل ${escapeHtml(it.name)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body"><table><thead><tr><th>التاريخ</th><th>العملية</th><th>التغيير</th><th>المتبقي</th><th>المستخدم</th></tr></thead><tbody>
+    ${(it.log||[]).map(l=>`<tr><td style="font-size:12px">${fmtDate(l.ts)} ${new Date(l.ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</td><td>${escapeHtml(l.text)}</td>
+      <td class="num" style="color:${l.delta<0?'var(--danger)':l.delta>0?'var(--success)':'inherit'}">${l.delta>0?'+':''}${l.delta||'—'}</td><td class="num">${l.qty}</td><td style="font-size:12px">${escapeHtml(l.user||'')}</td></tr>`).join('') || '<tr class="empty-row"><td colspan="5">لا يوجد سجل</td></tr>'}
+    </tbody></table></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">إغلاق</button></div>`;
+  openModal();
+}
+/* Called when results are saved: each test with a result uses its kit once per order
+   (the kit that expires first and is still valid — FEFO). Returns warnings for tests with no usable kit. */
+function consumeKitsForOrder(o){
+  const inv = (state.inventory||[]).filter(it=>!it.archived);
+  if(!inv.length) return { used:0, warnings:[] };
+  o.kitUse = o.kitUse || {};
+  let used = 0; const warnings = [];
+  o.testIds.forEach(tid=>{
+    if(o.kitUse[tid]) return;
+    const r = o.results && o.results[tid];
+    if(!r || r.value===undefined || r.value===null || String(r.value).trim()==='') return;
+    const linked = inv.filter(it => (it.testIds||[]).includes(tid));
+    if(!linked.length) return;
+    const usable = linked.filter(it => (Number(it.qty)||0) > 0 && !(daysUntil(it.expiry) < 0))
+      .sort((a,b)=> String(a.expiry||'9999').localeCompare(String(b.expiry||'9999')));
+    const t = testById(tid);
+    if(!usable.length){ warnings.push(testDisplayName(t)); return; }
+    const it = usable[0], n = it.perTest!=null ? Number(it.perTest) : 1;
+    it.qty = Math.max(0, (Number(it.qty)||0) - n);
+    kitLog(it, `طلب #${o.no} — ${testDisplayName(t)}`, -n);
+    o.kitUse[tid] = it.id; used++;
+  });
+  return { used, warnings };
 }
 
 /* ===================== PATIENTS ===================== */
@@ -3068,8 +3297,11 @@ async function saveResults(orderId){
     if(!ok){ showToast('لم يتم الحفظ — تحقق من القيم الحرجة'); return; }
   }
   o.status = 'completed';
+  const kits = consumeKitsForOrder(o);
+  if(kits.used) save('inventory');
   await save('orders');
-  closeModal(); renderPage();
+  closeModal(); renderNav(); renderPage();
+  if(kits.warnings.length) setTimeout(()=>showToast('⚠️ لا يوجد كيت صالح في المخزون لـ: ' + kits.warnings.join('، ')), 2600);
   if(criticals.length){
     showToast('حُفظت أرقام حرجة: ' + criticals.map(c=>c.name).join('، '));
     logAudit('نتائج حرجة', `طلب #${o.no}: ${criticals.map(c=>c.name).join('، ')}`);
