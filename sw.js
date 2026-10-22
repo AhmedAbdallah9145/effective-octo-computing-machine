@@ -1,5 +1,5 @@
 /* مختبر مسك الطبي — service worker: lets the app open offline */
-const CACHE = 'misk-lab-v18';
+const CACHE = 'misk-lab-v19';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
