@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.5 — 22/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.6 — 22/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -597,7 +597,7 @@
     <div class="field"><label>كلمة المرور</label><input id="login-password" type="password" class="text-input" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;justify-content:center" onclick="doLogin()">تسجيل الدخول</button>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.5 — 22/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.6 — 22/10/2026</div>
   </div>
 </div>
 
@@ -2778,7 +2778,7 @@ function openResultsModal(orderId){
             oninput="onResultInput('${t.id}', ${isNumeric}, '${gender||''}')">
           ${opts?`<select class="select-input" title="اختيار من القائمة" style="width:34px;flex-shrink:0;padding:6px 2px;font-size:12px" onchange="if(this.value){const i=document.querySelector('input[data-test=&quot;${t.id}&quot;]'); i.value=this.value; i.dispatchEvent(new Event('input')); this.selectedIndex=0;}"><option value="">▾</option>${opts.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select><datalist id="dl-${t.id}">${opts.map(o=>`<option value="${escapeHtml(o)}">`).join('')}</datalist>`:''}</div>
           <input class="text-input" id="uov-${t.id}" dir="ltr" value="${escapeHtml(unitInputVal)}" placeholder="—" title="الوحدة — قابلة للتعديل لهذا الطلب" style="padding:5px 7px;font-size:12.5px" onchange="applyResultOverride('${o.id}')">
-          ${pk ? `<div>${phaseSel}<input type="hidden" id="rov-${t.id}" value="${escapeHtml(r.refOv||'')}"></div>` : `<input class="text-input" id="rov-${t.id}" dir="ltr" value="${escapeHtml(refInputVal)}" placeholder="—" title="المعدل الطبيعي — قابل للتعديل لهذا الطلب" style="padding:5px 7px;font-size:12px" onchange="applyResultOverride('${o.id}')">`}
+          ${pk ? `<div>${phaseSel}<input type="hidden" id="rov-${t.id}" value="${escapeHtml(r.refOv||'')}"></div>` : `<div><input class="text-input" id="rov-${t.id}" dir="ltr" value="${escapeHtml(refInputVal)}" placeholder="—" title="المعدل الطبيعي — قابل للتعديل لهذا الطلب" style="padding:5px 7px;font-size:12px;width:100%" onchange="applyResultOverride('${o.id}')">${(t.refLowM!=null && t.refLowF!=null) ? `<div dir="ltr" style="font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.4"><b>Male:</b> ${t.refLowM} - ${t.refHighM} &nbsp;|&nbsp; <b>Female:</b> ${t.refLowF} - ${t.refHighF}${gender?'':' <span style="color:var(--danger)">(حدد جنس المريض)</span>'}</div>` : ''}</div>`}
           <div id="flag-${t.id}">
             ${isNumeric? flagBadge(initialFlag) : `
               <select class="select-input" id="manual-${t.id}" style="padding:6px 8px;font-size:12.5px">
