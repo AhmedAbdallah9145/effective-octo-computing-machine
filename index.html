@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px">إصدار 19-10-2026 (ب)</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.5 — 22/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -597,7 +597,7 @@
     <div class="field"><label>كلمة المرور</label><input id="login-password" type="password" class="text-input" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;justify-content:center" onclick="doLogin()">تسجيل الدخول</button>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center">الإصدار 1.4 — 22/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.5 — 22/10/2026</div>
   </div>
 </div>
 
@@ -849,9 +849,9 @@ async function loadState(){
     state.settings.refReviewV1 = true;
     await save('settings');
   }
-  if(state.settings && !state.settings.hormonePsaV4){
+  if(state.settings && !state.settings.hormonePsaV5){
     if(applyHormonePsaV4()) await save('tests');
-    state.settings.hormonePsaV4 = true;
+    state.settings.hormonePsaV5 = true;
     await save('settings');
   }
   if(state.settings && !state.settings.semenV3){
@@ -2193,17 +2193,42 @@ function applyHormonePsaV4(){
   let changed = 0;
   const key = x => ((x.nameEn||x.name||'')+'').trim().toLowerCase();
   const rename = { 'testosterone':'Testosterone (Total)', 'prostate specific antigen (psa)':'Total PSA', 'psa':'Total PSA', 'total psa (prostate specific antigen)':'Total PSA' };
-  state.tests.forEach(t=>{ const nn = rename[key(t)]; if(nn && !state.tests.some(x=>key(x)===nn.toLowerCase())){ t.name = nn; t.nameEn = nn; changed++; } });
+  const fuzzy = k => {
+    if(rename[k]) return rename[k];
+    const free = /free|حر/.test(k), ratio = /ratio|نسبة|%/.test(k);
+    if(/testosterone|تستوستيرون|تستستيرون/.test(k)) return free ? 'Testosterone (Free)' : 'Testosterone (Total)';
+    if(/\bpsa\b|prostate|بروستات/.test(k) && !ratio && !/total & free|panel/.test(k)) return free ? 'Free PSA' : 'Total PSA';
+    return null;
+  };
+  state.tests.forEach(t=>{ const nn = fuzzy(key(t)); if(nn && key(t)!==nn.toLowerCase() && !state.tests.some(x=>key(x)===nn.toLowerCase())){ t.name = nn; t.nameEn = nn; changed++; } });
   ['Testosterone (Total)','Testosterone (Free)','Total PSA','Free PSA','Free/Total PSA Ratio','PSA (Total & Free)'].forEach(n=>{
     const row = DEFAULT_TEST_CATALOG.find(r=>r[0]===n); if(!row) return;
     const rr = _rowRef(row);
     let t = state.tests.find(x=>key(x)===n.toLowerCase());
     if(!t){ t = { id: uid(), name:n, nameEn:n, category: row[1], price: 0 }; state.tests.push(t); }
+    t.nameEn = n; if(/^[\x00-\x7F]*$/.test(t.name||'')) t.name = n;
     Object.assign(t, { unit: rr.unit, refLow: rr.refLow, refHigh: rr.refHigh, refText: rr.refText, refLowM: rr.refLowM, refHighM: rr.refHighM, refLowF: rr.refLowF, refHighF: rr.refHighF });
     if(rr.panel) t.panel = rr.panel;
     changed++;
   });
   return changed;
+}
+async function refreshRangesFromCatalog(){
+  if(!confirm('سيتم تحديث الوحدات والمعدلات الطبيعية لكل التحاليل الموجودة حسب الدليل المعتمد بالنظام.\nالأسعار والنتائج السابقة لن تتغير.\nأي معدل عدّلته يدوياً لتحليل موجود بالدليل سيُستبدل.\n\nهل تريد المتابعة؟')) return;
+  applyHormonePsaV4(); applySemenV2();
+  const key = x => ((x.nameEn||x.name||'')+'').trim().toLowerCase();
+  let n = 0;
+  DEFAULT_TEST_CATALOG.forEach(row=>{
+    const t = state.tests.find(x=>key(x)===row[0].toLowerCase()); if(!t) return;
+    const rr = _rowRef(row);
+    const before = JSON.stringify([t.unit,t.refLow,t.refHigh,t.refText,t.refLowM,t.refHighM,t.refLowF,t.refHighF,t.panel]);
+    Object.assign(t, { unit: rr.unit, refLow: rr.refLow, refHigh: rr.refHigh, refText: rr.refText, refLowM: rr.refLowM, refHighM: rr.refHighM, refLowF: rr.refLowF, refHighF: rr.refHighF });
+    if(rr.panel) t.panel = rr.panel;
+    if(JSON.stringify([t.unit,t.refLow,t.refHigh,t.refText,t.refLowM,t.refHighM,t.refLowF,t.refHighF,t.panel]) !== before) n++;
+  });
+  await save('tests'); renderTests();
+  showToast(n ? `تم تحديث المعدلات الطبيعية لـ ${n} تحليل` : 'كل المعدلات محدّثة بالفعل');
+  logAudit('تحديث المعدلات من الدليل', String(n));
 }
 async function importDefaultTestCatalog(){
   const existing = new Set(state.tests.map(t=>(t.nameEn||t.name||'').trim().toLowerCase()));
@@ -2280,6 +2305,7 @@ async function autoTranslateTestNames(){
 function renderTests(){
   setTopbar('دليل التحاليل', 'قائمة التحاليل والأسعار والمعدلات الطبيعية، مصنّفة حسب الفئة', `
     <button class="btn btn-outline" onclick="importDefaultTestCatalog()">📥 استيراد قائمة جاهزة (+60)</button>
+    ${isAdmin()?`<button class="btn btn-outline" onclick="refreshRangesFromCatalog()">🔄 تحديث المعدلات حسب الدليل</button>`:''}
     <button class="btn btn-outline" onclick="autoTranslateTestNames()">🌐 ترجمة الأسماء تلقائياً</button>
     <button class="btn btn-primary" onclick="openTestModal()">+ إضافة تحليل</button>
   `);
