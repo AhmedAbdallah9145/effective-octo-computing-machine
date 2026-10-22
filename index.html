@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.6 — 22/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 1.7 — 22/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -597,7 +597,7 @@
     <div class="field"><label>كلمة المرور</label><input id="login-password" type="password" class="text-input" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
     <div id="login-error" class="login-error"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;justify-content:center" onclick="doLogin()">تسجيل الدخول</button>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.6 — 22/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 1.7 — 22/10/2026</div>
   </div>
 </div>
 
@@ -1449,7 +1449,12 @@ function phaseKey(t){
   if(/^cortisol/.test(n)) return 'cort';
   return null;
 }
-function phaseById(t, id){ const k = phaseKey(t); return k ? (PHASE_RANGES[k].find(p=>p.id===id) || null) : null; }
+function phaseList(t){
+  const k = phaseKey(t); if(!k) return null;
+  const custom = (t && t.phaseRanges) || {};
+  return PHASE_RANGES[k].map(p => custom[p.id] ? Object.assign({}, p, custom[p.id]) : p);
+}
+function phaseById(t, id){ const l = phaseList(t); return l ? (l.find(p=>p.id===id) || null) : null; }
 function phaseRangeStr(ph){ return `${ph.lo} - ${ph.hi}`; }
 function applyPhase(orderId, tid, phaseId){
   const o = state.orders.find(x=>x.id===orderId); if(!o) return;
@@ -2182,6 +2187,7 @@ function applySemenV2(){
     const rr = _rowRef(row);
     let t = state.tests.find(x=>key(x)===row[0].toLowerCase());
     if(!t){ t = { id: uid(), name: row[0], nameEn: row[0], category: 'Semen', price: 0 }; state.tests.push(t); }
+    if(t.refCustom) return;
     Object.assign(t, { unit: rr.unit, refLow: rr.refLow, refHigh: rr.refHigh, refText: rr.refText, refLowM:null, refHighM:null, refLowF:null, refHighF:null });
     if(rr.panel) t.panel = rr.panel;
     changed++;
@@ -2207,6 +2213,7 @@ function applyHormonePsaV4(){
     let t = state.tests.find(x=>key(x)===n.toLowerCase());
     if(!t){ t = { id: uid(), name:n, nameEn:n, category: row[1], price: 0 }; state.tests.push(t); }
     t.nameEn = n; if(/^[\x00-\x7F]*$/.test(t.name||'')) t.name = n;
+    if(t.refCustom){ if(rr.panel && !t.panel) t.panel = rr.panel; return; }
     Object.assign(t, { unit: rr.unit, refLow: rr.refLow, refHigh: rr.refHigh, refText: rr.refText, refLowM: rr.refLowM, refHighM: rr.refHighM, refLowF: rr.refLowF, refHighF: rr.refHighF });
     if(rr.panel) t.panel = rr.panel;
     changed++;
@@ -2214,12 +2221,13 @@ function applyHormonePsaV4(){
   return changed;
 }
 async function refreshRangesFromCatalog(){
-  if(!confirm('سيتم تحديث الوحدات والمعدلات الطبيعية لكل التحاليل الموجودة حسب الدليل المعتمد بالنظام.\nالأسعار والنتائج السابقة لن تتغير.\nأي معدل عدّلته يدوياً لتحليل موجود بالدليل سيُستبدل.\n\nهل تريد المتابعة؟')) return;
+  if(!confirm('سيتم تحديث الوحدات والمعدلات الطبيعية لكل التحاليل الموجودة حسب الدليل المعتمد بالنظام.\nالأسعار والنتائج السابقة لن تتغير.\nالتحاليل التي عدّلت معدلها يدوياً لن تتغير.\n\nهل تريد المتابعة؟')) return;
   applyHormonePsaV4(); applySemenV2();
   const key = x => ((x.nameEn||x.name||'')+'').trim().toLowerCase();
-  let n = 0;
+  let n = 0, skipped = 0;
   DEFAULT_TEST_CATALOG.forEach(row=>{
     const t = state.tests.find(x=>key(x)===row[0].toLowerCase()); if(!t) return;
+    if(t.refCustom){ skipped++; return; }
     const rr = _rowRef(row);
     const before = JSON.stringify([t.unit,t.refLow,t.refHigh,t.refText,t.refLowM,t.refHighM,t.refLowF,t.refHighF,t.panel]);
     Object.assign(t, { unit: rr.unit, refLow: rr.refLow, refHigh: rr.refHigh, refText: rr.refText, refLowM: rr.refLowM, refHighM: rr.refHighM, refLowF: rr.refLowF, refHighF: rr.refHighF });
@@ -2227,7 +2235,7 @@ async function refreshRangesFromCatalog(){
     if(JSON.stringify([t.unit,t.refLow,t.refHigh,t.refText,t.refLowM,t.refHighM,t.refLowF,t.refHighF,t.panel]) !== before) n++;
   });
   await save('tests'); renderTests();
-  showToast(n ? `تم تحديث المعدلات الطبيعية لـ ${n} تحليل` : 'كل المعدلات محدّثة بالفعل');
+  showToast((n ? `تم تحديث المعدلات الطبيعية لـ ${n} تحليل` : 'كل المعدلات محدّثة بالفعل') + (skipped ? ` — ${skipped} تحليل معدّل يدوياً لم يتغير` : ''));
   logAudit('تحديث المعدلات من الدليل', String(n));
 }
 async function importDefaultTestCatalog(){
@@ -2417,13 +2425,24 @@ function openTestModal(id){
           <div class="field"><label>حد أقصى (أنثى)</label><input class="text-input" id="tf-refhigh-f" type="number" step="0.01" value="${t&&t.refHighF!=null?t.refHighF:''}"></div>
         </div>
       </div>
+      ${t && phaseKey(t) ? `
+      <div class="field" style="background:var(--bg-soft,#F4F8F7);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+        <label>المعدل الطبيعي حسب المرحلة — عدّله حسب نشرة الكيت / جهاز الفحص</label>
+        <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;font-size:11.5px;font-weight:800;color:var(--ink-soft)"><span></span><span>الحد الأدنى (Min)</span><span>الحد الأقصى (Max)</span></div>
+        ${phaseList(t).map(p=>`<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;align-items:center;margin-top:6px">
+          <span dir="ltr" style="font-size:12.5px;font-weight:700;text-align:left">${escapeHtml(p.en)}</span>
+          <input class="text-input" type="number" step="any" id="ph-lo-${p.id}" value="${p.lo}" placeholder="Min" dir="ltr">
+          <input class="text-input" type="number" step="any" id="ph-hi-${p.id}" value="${p.hi}" placeholder="Max" dir="ltr">
+        </div>`).join('')}
+      </div>` : ''}
       <div class="field">
         <label>مكونات المجموعة (اختياري)</label>
         <textarea class="text-input" id="tf-panel" dir="ltr" rows="3" style="text-align:left" placeholder="Blood Group (ABO)&#10;Rh Factor (Rh D)">${t&&Array.isArray(t.panel)?escapeHtml(t.panel.join('\n')):''}</textarea>
         <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px">اكتب اسم كل تحليل تابع بسطر مستقل (بنفس اسمه الإنجليزي بالضبط). عند اختيار هذا التحليل بالطلب تنضاف كل المكونات تلقائياً. اتركه فارغاً لتحليل عادي.</p>
       </div>
       <div class="field" id="ref-text" style="${!(t&&t.refLow==null && t.refText)? (t&&t.refLow!=null?'display:none':'') : ''}${t&&t.refLow!=null?'display:none':''}">
-        <label>وصف المعدل الطبيعي</label><input class="text-input" id="tf-reftext" value="${t?escapeHtml(t.refText||''):''}" placeholder="مثال: سلبي / حسب المكونات">
+        <label>وصف المعدل الطبيعي</label><input class="text-input" id="tf-reftext" dir="auto" value="${t?escapeHtml(t.refText||''):''}" placeholder="مثال: Negative  أو  < 200  أو  > 40  أو  ≥ 39">
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px">إذا كتبت رقماً بإشارة مثل <b dir="ltr">&lt; 200</b> أو <b dir="ltr">&gt; 40</b> أو <b dir="ltr">≥ 39</b>، النظام بيحسب High / Low لحاله.</p>
       </div>
     </div>
     <div class="modal-foot">
@@ -2461,7 +2480,20 @@ async function saveTest(id){
     refText: type==='text' ? document.getElementById('tf-reftext').value.trim() : '',
     panel: (()=>{ const l = document.getElementById('tf-panel').value.split('\n').map(x=>x.trim()).filter(Boolean); return l.length ? l : null; })(),
   };
-  if(id){ Object.assign(state.tests.find(x=>x.id===id), data); }
+  if(id){
+    const old = state.tests.find(x=>x.id===id);
+    const refSig = x => JSON.stringify([x.unit||'',x.refLow??null,x.refHigh??null,x.refLowM??null,x.refHighM??null,x.refLowF??null,x.refHighF??null,x.refText||'']);
+    if(old && phaseKey(old)){
+      const pr = {};
+      phaseList(old).forEach(p=>{ const lo = document.getElementById('ph-lo-'+p.id), hi = document.getElementById('ph-hi-'+p.id);
+        if(lo && hi && lo.value!=='' && hi.value!==''){ const L = parseFloat(lo.value), H = parseFloat(hi.value); const def = PHASE_RANGES[phaseKey(old)].find(x=>x.id===p.id);
+          if(!def || L!==def.lo || H!==def.hi) pr[p.id] = { lo:L, hi:H }; } });
+      data.phaseRanges = Object.keys(pr).length ? pr : null;
+      if(JSON.stringify(data.phaseRanges||null) !== JSON.stringify(old.phaseRanges||null)) data.refCustom = true;
+    }
+    if(old && refSig(old) !== refSig(data)) data.refCustom = true;
+    Object.assign(old, data);
+  }
   else{ state.tests.push({ id: uid(), ...data }); }
   await save('tests');
   const _ret = window._returnToOrder; window._returnToOrder = null;
@@ -2758,7 +2790,7 @@ function openResultsModal(orderId){
       if(pk && !r.refOv && gender==='male' && phaseById(t,'male')){ const mp = phaseById(t,'male'); r = Object.assign({}, r, { refOv: phaseRangeStr(mp), phase:'male' }); }
       const phaseSel = pk ? `<select class="select-input" id="phase-${t.id}" dir="ltr" title="Reference range — choose phase" style="padding:5px 7px;font-size:12px;width:100%" onchange="applyPhase('${o.id}','${t.id}',this.value)">
             <option value="">${pk==='cort'?'Choose sampling time':'All phases (print full table)'}</option>
-            ${PHASE_RANGES[pk].map(p=>`<option value="${p.id}" ${r.phase===p.id?'selected':''}>${p.en}: ${p.lo} - ${p.hi}</option>`).join('')}
+            ${phaseList(t).map(p=>`<option value="${p.id}" ${r.phase===p.id?'selected':''}>${p.en}: ${p.lo} - ${p.hi}</option>`).join('')}
           </select>` : '';
       const te = effTest(t, r);
       const range = activeRefRange(te, gender);
@@ -2772,7 +2804,7 @@ function openResultsModal(orderId){
       const opts = resultOptionsFor(t);
       return `
         <div class="result-row-grid">
-          <div><div class="rname" dir="ltr">${escapeHtml(testDisplayName(t))}<button type="button" title="تعديل الوحدة / المعدل الطبيعي / السعر لهذا التحليل" onclick="openQuickRefEdit('${o.id}','${t.id}')" style="border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:13px;padding:0 6px">✎</button><button type="button" title="حذف هذا التحليل من الطلب" onclick="removeTestFromOrder('${o.id}','${t.id}')" style="border:none;background:none;cursor:pointer;color:var(--danger);font-size:15px;font-weight:900;padding:0 4px">✕</button></div>${prevHint}</div>
+          <div><div class="rname" dir="ltr">${escapeHtml(testDisplayName(t))}<button type="button" title="تعديل الوحدة / المعدل الطبيعي / السعر لهذا التحليل" onclick="openQuickRefEdit('${o.id}','${t.id}')" style="border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--primary);font-size:11.5px;font-weight:700;padding:1px 6px;margin:0 6px">✎ المعدل</button><button type="button" title="حذف هذا التحليل من الطلب" onclick="removeTestFromOrder('${o.id}','${t.id}')" style="border:none;background:none;cursor:pointer;color:var(--danger);font-size:15px;font-weight:900;padding:0 4px">✕</button></div>${prevHint}</div>
           <div style="display:flex;gap:4px;align-items:center"><input class="result-value-input ${flagClass}" data-test="${t.id}" data-numeric="${isNumeric}" value="${r.value!=null?escapeHtml(r.value):''}"
             placeholder="${isNumeric?'القيمة':'النتيجة'}" ${opts?`list="dl-${t.id}"`:''}
             oninput="onResultInput('${t.id}', ${isNumeric}, '${gender||''}')">
@@ -2832,7 +2864,7 @@ function openResultsModal(orderId){
   mb.innerHTML = `
     <div class="modal-head"><h3>نتائج الطلب #${o.no} — ${escapeHtml(patientName(o.patientId))}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px">الوحدة والمعدل الطبيعي قابلان للتعديل مباشرة لكل تحليل (يخص هذا الطلب فقط). أيقونة ✎ بجانب الاسم لتعديله لكل الطلبات.</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px">الوحدة والمعدل الطبيعي قابلان للتعديل مباشرة لكل تحليل (يخص هذا الطلب فقط). زر "✎ المعدل" بجانب الاسم لتعديله لكل الطلبات حسب جهاز الفحص (يبقى محفوظاً ولا يتغير بالتحديثات).</div>
       ${addBox}
       ${groupsHtml}
       <div class="field" style="margin-top:6px"><label>ملاحظات</label><textarea id="rf-notes" rows="2">${o.notes?escapeHtml(o.notes):''}</textarea></div>
@@ -3574,7 +3606,7 @@ function buildDocTestRow(tid, index, o, gender, withPrice){
   if(ph && isNumeric) refDisplay = `${ph.en}: ${range.lo} - ${range.hi} ${te.unit||''}`;
   else if(/^testosterone/i.test((t.nameEn||t.name||'').trim()) && !r.refOv && te.refLowM!=null && te.refLowF!=null)
     refDisplay = `Male: ${te.refLowM} - ${te.refHighM} | Female: ${te.refLowF} - ${te.refHighF} ${te.unit||''}`;
-  else if(pk && !r.refOv) refDisplay = PHASE_RANGES[pk].map(p=>`${p.en}: ${p.lo} - ${p.hi}`).join(' | ');
+  else if(pk && !r.refOv) refDisplay = phaseList(t).map(p=>`${p.en}: ${p.lo} - ${p.hi}`).join(' | ');
   const flag = isNumeric ? r.flag : r.manualFlag;
   const flagMap = { normal:'Normal', high:'High', low:'Low', 'critical-high':'High', 'critical-low':'Low' };
   const flagText = flagMap[flag] || '—';
