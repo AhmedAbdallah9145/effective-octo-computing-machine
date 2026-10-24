@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.0 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.1 — 25/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.0 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.1 — 25/10/2026</div>
   </div>
 </div>
 
@@ -3568,6 +3568,7 @@ function openSettingsModal(){
               </div>
               <div style="display:flex;align-items:center;gap:8px">
                 <span class="badge ${u.role==='admin'?'badge-completed':'badge-pending'}">${u.role==='admin'?'مدير':'مستخدم'}</span>
+                <button class="btn btn-outline btn-sm" onclick="openSetUserPassword('${u.username}')">🔑 كلمة مرور جديدة</button>
                 ${u.username !== 'faten' ? `<button class="btn btn-danger btn-sm" onclick="deleteUserAccount('${u.username}')">حذف</button>` : ''}
               </div>
             </div>`).join('')}
@@ -4216,18 +4217,33 @@ async function addLabMember(email){
   try{ await sb.from('lab_members').upsert({ email: email.toLowerCase() }); }catch(e){}   // table exists only after the security SQL step
 }
 async function createAuthAccount(uname, password){
-  const email = toLoginEmail(uname).toLowerCase();
-  await addLabMember(email);
   try{
-    const { data, error } = await tempAuthClient().auth.signUp({ email, password });
-    if(error){
-      if(/already|registered|exists/i.test(error.message||'')) return { ok:false, msg:'هذا الاسم مسجّل مسبقاً بنظام الدخول — اختر اسم مستخدم آخر' };
-      if(/password/i.test(error.message||'')) return { ok:false, msg:'كلمة المرور ضعيفة — استخدم 6 أحرف على الأقل' };
-      return { ok:false, msg:'تعذر إنشاء الحساب: ' + error.message };
-    }
-    if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length===0) return { ok:false, msg:'هذا الاسم مسجّل مسبقاً بنظام الدخول — اختر اسم مستخدم آخر' };
-    return { ok:true };
-  }catch(e){ return { ok:false, msg:'تعذر الاتصال — تأكد من الإنترنت' }; }
+    const { data, error } = await sb.rpc('admin_create_lab_user', { p_username: uname.toLowerCase(), p_password: password });
+    if(error) throw error;
+    if(data === 'ok') return { ok:true };
+    const msg = { exists:'هذا الاسم مسجّل مسبقاً — اختر اسم مستخدم آخر', weak:'كلمة المرور لازم تكون 6 أحرف على الأقل', bad_name:'اسم المستخدم بالإنجليزي وبدون مسافات', not_admin:'إضافة المستخدمين للمدير فقط' }[data];
+    return { ok:false, msg: msg || ('تعذر إنشاء الحساب: ' + data) };
+  }catch(e){ return { ok:false, msg:'تعذر إنشاء الحساب — تأكد من الإنترنت' }; }
+}
+function openSetUserPassword(uname){
+  const mb = document.getElementById('modal-box'); mb.className = 'modal';
+  mb.innerHTML = `<div class="modal-head"><h3>كلمة مرور جديدة لـ ${escapeHtml(uname)}</h3><button class="modal-close" onclick="openSettingsModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px">استخدمها إذا نسي الموظف كلمة المرور. أعطه الكلمة الجديدة، ويقدر يغيّرها لاحقاً من "تغيير كلمة المرور".</p>
+      <div class="field"><label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input id="sup-1" type="text" class="text-input" autocomplete="off" dir="ltr"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openSettingsModal()">إلغاء</button><button class="btn btn-primary" onclick="saveUserPassword('${escapeHtml(uname)}')">حفظ</button></div>`;
+  openModal();
+}
+async function saveUserPassword(uname){
+  const pw = document.getElementById('sup-1').value.trim();
+  if(pw.length < 6){ showToast('كلمة المرور لازم تكون 6 أحرف على الأقل'); return; }
+  try{
+    const { data, error } = await sb.rpc('admin_set_password', { p_username: uname.toLowerCase(), p_password: pw });
+    if(error) throw error;
+    if(data === 'ok' || data === 'created'){ showToast(`تم تعيين كلمة مرور جديدة لـ ${uname} ✅`); logAudit('تعيين كلمة مرور', uname); openSettingsModal(); }
+    else showToast(data === 'not_admin' ? 'هذه العملية للمدير فقط' : 'تعذر الحفظ: ' + data);
+  }catch(e){ showToast('تعذر الحفظ — تأكد من الإنترنت'); }
 }
 
 /* After a successful secure login: load the lab data and open the app with this user's profile. */
@@ -4304,7 +4320,7 @@ async function doLogin(){
     let old = false;
     try{ const { data: ok } = await sb.rpc('legacy_password_ok', { p_username: uname, p_password: password }); old = ok === true; }catch(e){}
     if(old){
-      _pendingMigration = { uname, email };
+      _pendingMigration = { uname, email, oldPassword: password };
       document.getElementById('newpass-box').style.display = 'block';
       btn.style.display = 'none';
       setTimeout(()=>document.getElementById('np-1').focus(), 50);
@@ -4328,18 +4344,15 @@ async function finishMigration(){
   if(a.length < 6){ errEl.textContent = 'كلمة المرور لازم تكون 6 أحرف على الأقل'; return; }
   if(a !== b){ errEl.textContent = 'كلمتا المرور غير متطابقتين'; return; }
   const nb = document.getElementById('np-btn'); nb.disabled = true; nb.textContent = '...جارِ الحفظ';
-  const { uname, email } = _pendingMigration;
+  const { uname, email, oldPassword } = _pendingMigration;
   try{
-    let { data, error } = await sb.auth.signUp({ email, password: a });
-    if(error && !/already|registered|exists/i.test(error.message||'')) throw error;
-    if(error || !(data && data.session)){
-      const r = await sb.auth.signInWithPassword({ email, password: a });
-      if(r.error){
-        errEl.textContent = /confirm/i.test(r.error.message||'') ? 'يجب إيقاف "Confirm email" في إعدادات Supabase أولاً، ثم أعد المحاولة'
-          : 'هذا الحساب نُقل مسبقاً بكلمة مرور مختلفة — سجّل الدخول بكلمة المرور الجديدة التي اخترتها سابقاً';
-        nb.disabled = false; nb.textContent = 'حفظ وتسجيل الدخول'; return;
-      }
-    }
+    const { data: res, error: rpcErr } = await sb.rpc('migrate_legacy_account', { p_username: uname, p_old_password: oldPassword, p_new_password: a });
+    if(rpcErr) throw rpcErr;
+    if(res === 'weak'){ errEl.textContent = 'كلمة المرور لازم تكون 6 أحرف على الأقل'; nb.disabled=false; nb.textContent='حفظ وتسجيل الدخول'; return; }
+    if(res === 'bad_old'){ errEl.textContent = 'كلمة المرور القديمة لم تعد صالحة — سجّل الدخول بكلمة المرور الجديدة'; nb.disabled=false; nb.textContent='حفظ وتسجيل الدخول'; return; }
+    if(res === 'exists'){ errEl.textContent = 'هذا الحساب تم تفعيله مسبقاً — سجّل الدخول بكلمة المرور الجديدة'; nb.disabled=false; nb.textContent='حفظ وتسجيل الدخول'; return; }
+    const r = await sb.auth.signInWithPassword({ email, password: a });
+    if(r.error) throw r.error;
     await addLabMember(email);
     _pendingMigration = null;
     document.getElementById('newpass-box').style.display = 'none';
