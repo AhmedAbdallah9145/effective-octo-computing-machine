@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.1 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.2 — 25/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.1 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.2 — 25/10/2026</div>
   </div>
 </div>
 
@@ -3543,6 +3543,18 @@ function openSettingsModal(){
       </div>
       ${isAdmin() ? `
       <div style="margin-top:8px;padding-top:16px;border-top:1px solid var(--line)">
+        <label style="display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px">📲 إرسال واتساب مباشر من التطبيق (واتساب الرسمي للأعمال)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:8px">
+          <input type="checkbox" id="sf-wa-direct" ${s.waDirect?'checked':''}> تفعيل الإرسال المباشر (إذا فشل، يرجع النظام للطريقة العادية تلقائياً)
+        </label>
+        <div class="field-row">
+          <div class="field"><label>مقدمة الدولة لأرقام المرضى التي تبدأ بـ 0</label>
+            <select class="select-input" id="sf-wa-prefix"><option value="972" ${(s.waPrefix||'972')==='972'?'selected':''}>972</option><option value="970" ${s.waPrefix==='970'?'selected':''}>970</option></select></div>
+          <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><button type="button" class="btn btn-outline btn-sm" onclick="testWhatsAppDirect(this)">🔌 فحص الربط</button></div>
+        </div>
+      </div>` : ''}
+      ${isAdmin() ? `
+      <div style="margin-top:8px;padding-top:16px;border-top:1px solid var(--line)">
         <label style="display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px">النسخ الاحتياطي — احفظ نسخة من بياناتك بشكل دوري لتجنب فقدانها</label>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button type="button" class="btn btn-outline btn-sm" onclick="exportBackup()">⬇ تنزيل نسخة احتياطية الآن</button>
@@ -3698,6 +3710,8 @@ async function removeInsurance(id){
   openSettingsModal();
 }
 async function saveSettings(){
+  const wad = document.getElementById('sf-wa-direct'); if(wad) state.settings.waDirect = wad.checked;
+  const wap = document.getElementById('sf-wa-prefix'); if(wap) state.settings.waPrefix = wap.value;
   state.settings.labName = document.getElementById('sf-name').value.trim() || 'مختبر مسك الطبي';
   const lne = document.getElementById('sf-name-en'); if(lne) state.settings.labNameEn = lne.value.trim();
   state.settings.labSub = document.getElementById('sf-sub').value.trim();
@@ -4144,11 +4158,59 @@ function toWhatsAppNumber(phone){
   let d = String(phone||'').replace(/\D/g,'');
   if(!d) return null;
   if(d.startsWith('970') || d.startsWith('972')) return d;
-  if(d.startsWith('0')) return '970' + d.slice(1);
+  if(d.startsWith('00')) return d.slice(2);
+  if(d.startsWith('0')) return ((state.settings && state.settings.waPrefix) || '972') + d.slice(1);
   return d;
+}
+function blobToBase64(blob){
+  return new Promise((res, rej)=>{ const r = new FileReader(); r.onload = ()=>res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+}
+const WA_ERRORS = {
+  not_configured:'واتساب المباشر غير مربوط بعد (ينقص مفتاح Meta)', not_member:'حسابك لا يملك صلاحية الإرسال', bad_number:'رقم المريض غير صحيح أو غير مسجّل',
+  upload_failed:'تعذر رفع الملف لواتساب', send_failed:'رفض واتساب إرسال الرسالة', file_too_big:'الملف كبير جداً'
+};
+async function testWhatsAppDirect(btn){
+  if(btn){ btn.disabled = true; btn.textContent = '...جارِ الفحص'; }
+  try{
+    const { data, error } = await sb.functions.invoke('send-whatsapp', { body:{ test:true } });
+    if(error) throw error;
+    showToast(data && data.ok ? '✅ الربط مع واتساب جاهز' : ('⚠️ ' + (WA_ERRORS[data && data.error] || (data && data.error) || 'غير جاهز')));
+  }catch(e){ showToast('⚠️ تعذر الوصول لخدمة الإرسال — تأكد من الإنترنت'); }
+  if(btn){ btn.disabled = false; btn.textContent = '🔌 فحص الربط'; }
+}
+/* Official WhatsApp Cloud API through the Supabase function. Returns true if WhatsApp accepted the message. */
+async function sendWhatsAppDirect(o, kind, html){
+  const patient = state.patients.find(p=>p.id===o.patientId) || {};
+  const to = toWhatsAppNumber(patient.phone);
+  if(!to){ showToast('لا يوجد رقم جوال للمريض'); return false; }
+  if(!window.jspdf) return false;
+  const blob = await captureElementAsPDF(html);
+  const pt = String(patient.nameEn||'').replace(/[^A-Za-z0-9 ]/g,'').trim().replace(/\s+/g,'-');
+  const fileName = `Misk-Lab-${kind==='report'?'Report':'Invoice'}-${o.no||''}${pt?'-'+pt:''}.pdf`;
+  const { data, error } = await sb.functions.invoke('send-whatsapp', { body:{ to, name: (patient.name||'').split(' ')[0] || patient.name, fileName, pdfBase64: await blobToBase64(blob) } });
+  if(error || !data || !data.ok){
+    const code = data && data.error;
+    showToast('⚠️ ' + (WA_ERRORS[code] || 'تعذر الإرسال المباشر') + (data && data.detail ? ' — ' + data.detail : '') + ' — سيتم فتح واتساب بالطريقة العادية');
+    return false;
+  }
+  o.waLog = o.waLog || [];
+  o.waLog.unshift({ ts: new Date().toISOString(), kind, to, id: data.messageId, by: currentUserEmail||'' });
+  save('orders', true);
+  logAudit('إرسال واتساب مباشر', `#${o.no} → ${to}`);
+  showToast(`✅ تم إرسال ${kind==='report'?'النتيجة':'الفاتورة'} على واتساب إلى ${patient.name||to}`);
+  return true;
 }
 async function shareViaWhatsApp(orderId, kind, btn){
   const o = state.orders.find(x=>x.id===orderId);
+  if(state.settings && state.settings.waDirect){
+    const lbl = btn ? btn.textContent : null;
+    if(btn){ btn.disabled = true; btn.textContent = '...جارِ الإرسال'; }
+    let ok = false;
+    try{ ok = await sendWhatsAppDirect(o, kind, kind === 'report' ? buildReportHTML(orderId) : buildInvoiceHTML(orderId)); }catch(e){ console.error(e); }
+    if(btn){ btn.disabled = false; btn.textContent = lbl; }
+    if(ok) return;
+    await new Promise(r=>setTimeout(r, 1500));
+  }
   const originalLabel = btn ? btn.textContent : null;
   if(btn){ btn.disabled = true; btn.textContent = '...جارِ التجهيز'; }
   try{
