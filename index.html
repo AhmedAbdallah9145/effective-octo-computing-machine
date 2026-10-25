@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.3 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.4 — 25/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.3 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.4 — 25/10/2026</div>
   </div>
 </div>
 
@@ -4263,7 +4263,9 @@ async function shareViaWhatsApp(orderId, kind, btn){
     const enName = String(pt.nameEn||'').replace(/[^A-Za-z0-9 ]/g,'').trim().replace(/\s+/g,'-');
     const fileName = `Misk-Lab-${kind==='report'?'Report':'Invoice'}-${o.no||''}${enName?'-'+enName:''}-${(o.date||todayISO()).slice(0,10)}.${ext}`;
     const file = new File([blob], fileName, { type:mime });
-    if(navigator.canShare && navigator.canShare({ files:[file] })){
+    // phones: native share sheet. Computers: never the Windows/Mac share pop-up (it opens WhatsApp tiny) —
+    // download the PDF and open the patient's chat in the WhatsApp app or a full-size WhatsApp Web window.
+    if(isMobileDevice() && navigator.canShare && navigator.canShare({ files:[file] })){
       await navigator.share({ files:[file], title:'تقرير نتيجة تحليل', text: `${label} ${patientName(o.patientId)}` });
     } else {
       const url = URL.createObjectURL(blob);
