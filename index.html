@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.4 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.5 — 25/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.4 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.5 — 25/10/2026</div>
   </div>
 </div>
 
@@ -3553,7 +3553,7 @@ function openSettingsModal(){
           <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><button type="button" class="btn btn-outline btn-sm" onclick="testWhatsAppDirect(this)">🔌 فحص الربط</button></div>
         </div>
         <div style="font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">فتح واتساب على هذا الكمبيوتر:
-          <strong>${getWaOpenMode()==='app'?'تطبيق واتساب':getWaOpenMode()==='web'?'واتساب ويب (نافذة كبيرة)':'لم يُحدد بعد'}</strong>
+          <strong>${getWaOpenMode()==='app'?'تطبيق واتساب':getWaOpenMode()==='web'?'واتساب ويب (صفحة كاملة)':'لم يُحدد بعد'}</strong>
           <button type="button" class="btn btn-ghost btn-sm" onclick="chooseWaOpenMode()">تغيير</button></div>
       </div>` : ''}
       ${isAdmin() ? `
@@ -4170,8 +4170,11 @@ function openWhatsAppChat(num, encodedText){
     window.location.href = `whatsapp://send?${num?`phone=${num}&`:''}text=${encodedText}`;
     return;
   }
-  const w = Math.max(1000, screen.availWidth || 1280), h = Math.max(700, screen.availHeight || 800);
-  window.open(`https://web.whatsapp.com/send?${num?`phone=${num}&`:''}text=${encodedText}`, 'misk-whatsapp-web', `width=${w},height=${h},left=0,top=0,resizable=yes,scrollbars=yes`);
+  const url = `https://web.whatsapp.com/send?${num?`phone=${num}&`:''}text=${encodedText}`;
+  const pre = _waPreWin; _waPreWin = null;
+  if(pre && !pre.closed){ try{ pre.location.href = url; pre.focus(); return; }catch(e){} }
+  const tab = window.open(url, 'misk-whatsapp-web');          // a normal full-size browser tab
+  if(!tab){ showToast('المتصفح منع فتح واتساب — اسمح بالنوافذ المنبثقة لهذا الموقع'); }
 }
 function chooseWaOpenMode(after){
   window._waAfterChoose = after || null;
@@ -4180,8 +4183,8 @@ function chooseWaOpenMode(after){
     <div class="modal-body">
       <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:6px" onclick="setWaOpenMode('app')">💻 تطبيق واتساب للكمبيوتر (الأفضل)</button>
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:14px">يفتح محادثة المريض مباشرة في تطبيق واتساب المثبّت على الجهاز، بدون كود دخول كل مرة. إذا التطبيق غير مثبت: نزّله من متجر Microsoft (WhatsApp).</div>
-      <button class="btn btn-outline" style="width:100%;justify-content:center;margin-bottom:6px" onclick="setWaOpenMode('web')">🌐 واتساب ويب بنافذة كبيرة</button>
-      <div style="font-size:12px;color:var(--ink-soft)">يفتح واتساب ويب بنافذة بحجم الشاشة. أول مرة امسح الكود من الجوال، وبعدها يبقى مسجّل.</div>
+      <button class="btn btn-outline" style="width:100%;justify-content:center;margin-bottom:6px" onclick="setWaOpenMode('web')">🌐 واتساب ويب بصفحة كاملة في المتصفح</button>
+      <div style="font-size:12px;color:var(--ink-soft)">يفتح واتساب ويب كصفحة كاملة في المتصفح (تبويب واحد يُعاد استخدامه). أول مرة امسح الكود من الجوال، وبعدها يبقى مسجّل.</div>
       <div style="font-size:11.5px;color:var(--ink-soft);margin-top:12px">تقدر تغيّر الاختيار لاحقاً من إعدادات المختبر.</div>
     </div>`;
   openModal();
@@ -4189,7 +4192,7 @@ function chooseWaOpenMode(after){
 function setWaOpenMode(mode){
   try{ localStorage.setItem(WA_OPEN_KEY, mode); }catch(e){}
   closeModal();
-  showToast(mode==='app' ? 'سيتم فتح واتساب من تطبيق الكمبيوتر' : 'سيتم فتح واتساب ويب بنافذة كبيرة');
+  showToast(mode==='app' ? 'سيتم فتح واتساب من تطبيق الكمبيوتر' : 'سيتم فتح واتساب ويب بصفحة كاملة');
   const f = window._waAfterChoose; window._waAfterChoose = null; if(f) setTimeout(f, 200);
 }
 function toWhatsAppNumber(phone){
@@ -4238,8 +4241,18 @@ async function sendWhatsAppDirect(o, kind, html){
   showToast(`✅ تم إرسال ${kind==='report'?'النتيجة':'الفاتورة'} على واتساب إلى ${patient.name||to}`);
   return true;
 }
+let _waPreWin = null;
 async function shareViaWhatsApp(orderId, kind, btn){
   const o = state.orders.find(x=>x.id===orderId);
+  _waPreWin = null;
+  if(!isMobileDevice() && getWaOpenMode()==='web' && !(state.settings && state.settings.waDirect)){
+    try{
+      _waPreWin = window.open('', 'misk-whatsapp-web');
+      if(_waPreWin && _waPreWin.document && (!_waPreWin.location || _waPreWin.location.href==='about:blank')){
+        _waPreWin.document.write('<meta charset="utf-8"><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:90vh;color:#0E5E59;font-size:20px" dir="rtl">⏳ جارِ تجهيز الملف وفتح واتساب...</body>');
+      }
+    }catch(e){ _waPreWin = null; }
+  }
   if(state.settings && state.settings.waDirect){
     const lbl = btn ? btn.textContent : null;
     if(btn){ btn.disabled = true; btn.textContent = '...جارِ الإرسال'; }
@@ -4281,6 +4294,7 @@ async function shareViaWhatsApp(orderId, kind, btn){
     }
   }catch(e){
     console.error(e);
+    try{ if(_waPreWin && !_waPreWin.closed) _waPreWin.close(); }catch(_){} _waPreWin = null;
     if(!(e && e.name === 'AbortError')){ showToast('حدث خطأ أثناء تجهيز الملف للمشاركة'); }
   }
   if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
