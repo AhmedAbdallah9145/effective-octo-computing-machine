@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.6 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.7 — 25/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.6 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.7 — 25/10/2026</div>
   </div>
 </div>
 
@@ -4262,7 +4262,8 @@ let _waPreWin = null;
 async function shareViaWhatsApp(orderId, kind, btn){
   const o = state.orders.find(x=>x.id===orderId);
   _waPreWin = null;
-  if(!isMobileDevice() && getWaOpenMode()==='web' && !(state.settings && state.settings.waDirect)){
+  const _cs = !!(navigator.canShare && navigator.canShare({ files:[new File(['x'],'x.pdf',{type:'application/pdf'})] }));
+  if(!_cs && !isMobileDevice() && getWaOpenMode()==='web' && !(state.settings && state.settings.waDirect)){
     try{
       _waPreWin = window.open('', 'misk-whatsapp-web');
       if(_waPreWin && _waPreWin.document && (!_waPreWin.location || _waPreWin.location.href==='about:blank')){
@@ -4295,13 +4296,10 @@ async function shareViaWhatsApp(orderId, kind, btn){
     const file = new File([blob], fileName, { type:mime });
     // phones: native share sheet. Computers: never the Windows/Mac share pop-up (it opens WhatsApp tiny) —
     // download the PDF and open the patient's chat in the WhatsApp app or a full-size WhatsApp Web window.
+    // Wherever the device can share files (phones, Windows Edge/Chrome, Mac): always use the share sheet —
+    // pick WhatsApp, pick the patient, the PDF is attached. Nothing is saved to the computer.
     const canFileShare = !!(navigator.canShare && navigator.canShare({ files:[file] }));
-    if(!isMobileDevice() && !getWaOpenMode() && canFileShare){
-      // first time on this computer: ask how to open WhatsApp, then continue with this same file
-      if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
-      chooseWaOpenMode(()=>shareViaWhatsApp(orderId, kind, btn)); return;
-    }
-    if(canFileShare && (isMobileDevice() || getWaOpenMode()==='share')){
+    if(canFileShare){
       try{
         await navigator.share({ files:[file], title:'تقرير نتيجة تحليل', text: `${label} ${patientName(o.patientId)}` });
       }catch(err){
