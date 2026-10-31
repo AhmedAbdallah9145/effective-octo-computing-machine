@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.8 — 31/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.9 — 31/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.8 — 31/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.9 — 31/10/2026</div>
   </div>
 </div>
 
@@ -865,6 +865,17 @@ async function loadState(){
     if(applyHormonePsaV4()) await save('tests');
     state.settings.hormonePsaV5 = true;
     await save('settings');
+  }
+  if(state.settings && !state.settings.addPthCalcitonin){
+    const key = x => ((x.nameEn||x.name||'')+'').trim().toLowerCase();
+    let n = 0;
+    ['Parathyroid Hormone (PTH, intact)','Calcitonin'].forEach(nm=>{
+      if(state.tests.some(x=>key(x)===nm.toLowerCase() || (/pth|parathyroid/.test(key(x)) && /pth/i.test(nm)))) return;
+      const row = DEFAULT_TEST_CATALOG.find(r=>r[0]===nm); if(!row) return;
+      state.tests.push(Object.assign({ id: uid(), name: nm, nameEn: nm, category: row[1], price: 0 }, _rowRef(row))); n++;
+    });
+    if(n) await save('tests');
+    state.settings.addPthCalcitonin = true; await save('settings');
   }
   if(state.settings && !state.settings.semenV3){
     if(applySemenV2()) await save('tests');
@@ -2256,6 +2267,8 @@ const DEFAULT_TEST_CATALOG = [
   ['CA 125','Tumor Markers','U/mL','','','< 35'],
   ['CA 15-3','Tumor Markers','U/mL','','','< 30'],
   ['Anti-TPO Antibody','Hormones','IU/mL','','','< 35'],
+  ['Parathyroid Hormone (PTH, intact)','Hormones','pg/mL',15,65],
+  ['Calcitonin','Tumor Markers','pg/mL',0,9.52,'',0,9.52,0,6.4],
   ['Anti-Thyroglobulin Antibody (Anti-Tg)','Hormones','IU/mL','','','< 40'],
   ['Estradiol (E2)','Hormones','pg/mL','','','Choose cycle phase'],
   ['Progesterone','Hormones','ng/mL','','','Choose cycle phase'],
@@ -2883,8 +2896,16 @@ function removeSelectedTest(testId){
    Ignores brackets/punctuation, matches words in any order, the Arabic name, and near-misspellings (e.g. "testron"). */
 function _normSearch(x){ return String(x||'').toLowerCase().replace(/[()\[\]{}.,\-_/&+:]/g,' ').replace(/\s+/g,' ').trim(); }
 function _isSubseq(q, txt){ let i = 0; for(const ch of txt){ if(ch===q[i]) i++; if(i===q.length) return true; } return false; }
+const SEARCH_ALIASES = {
+  'alpha-fetoprotein (afp)': 'afp alfa feto fetoprotein alpha phetoprotine ألفا فيتو',
+  'parathyroid hormone (pth, intact)': 'pth parathormone parathyroid باراثورمون جار الدرقية',
+  'calcitonin': 'calcitonin calcitnion كالسيتونين',
+  'anti-tpo antibody': 'anti tpo thyroid peroxidase antitpo',
+  'ca 19-9': 'ca19-9 ca199 ca 199'
+};
 function testMatchTier(t, q, q2){
-  const disp = _normSearch(testDisplayName(t)), ar = _normSearch(t.name), cat = _normSearch(t.category);
+  const alias = SEARCH_ALIASES[((t.nameEn||t.name||'')+'').trim().toLowerCase()] || '';
+  const disp = _normSearch(testDisplayName(t)), ar = _normSearch((t.name||'') + ' ' + alias), cat = _normSearch(t.category);
   const nq = _normSearch(q), nq2 = _normSearch(q2||q);
   if(!nq) return -1;
   if(disp.startsWith(nq) || disp.startsWith(nq2)) return 0;
