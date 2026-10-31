@@ -4220,7 +4220,9 @@ function printReport(orderId, resultsOnly){
   // Results-only: leave blank space top/bottom on EVERY page for the pre-printed colored letterhead
   let modeStyle = document.createElement('style');
   modeStyle.id = 'print-mode-style';
-  let css = pageFooterCSS(o);
+  // On the pre-printed letterhead the bottom margin holds the letterhead's own printed footer,
+  // so the patient-name / page-number margin boxes would print on top of it — skip them there.
+  let css = resultsOnly ? '' : pageFooterCSS(o);
   if(resultsOnly){
     const st = state.settings || {};
     const top = Number(st.letterTop)>=0 && st.letterTop!=='' && st.letterTop!=null ? Number(st.letterTop) : 45;
