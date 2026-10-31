@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.7 — 25/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.8 — 31/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.7 — 25/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.8 — 31/10/2026</div>
   </div>
 </div>
 
@@ -2997,6 +2997,16 @@ async function saveOrder(){
   });
   const insEl = document.getElementById('of-insurance');
   const insuranceId = insEl ? insEl.value : '';
+  // same patient already has an order today? offer to add these tests to it instead of a second order
+  const today = todayISO();
+  const sameDay = state.orders.filter(o => o.patientId===patientId && String(o.date||'').slice(0,10)===today)
+    .sort((a,b)=> String(b.date).localeCompare(String(a.date)))[0];
+  if(sameDay && !window._forceNewOrder){
+    const choice = await askMergeOrder(sameDay, testIds);
+    if(choice === 'cancel') return;
+    if(choice === 'merge'){ await mergeIntoOrder(sameDay, testIds, prices, discount); return; }
+  }
+  window._forceNewOrder = false;
   const order = {
     id: uid(), no: state.settings.nextOrderNo, invoiceNo: state.settings.nextInvoiceNo, patientId, testIds,
     date: new Date().toISOString(), status:'pending', results:{}, paymentStatus:'unpaid', discount, prices,
@@ -3008,6 +3018,40 @@ async function saveOrder(){
   await save('orders'); await save('settings');
   closeModal(); switchTab('orders'); showToast('تم إنشاء الطلب #'+order.no);
   logAudit('إنشاء طلب', `#${order.no} — ${patientName(patientId)}`);
+}
+/* Small confirm box over the order form (keeps what was typed). Resolves 'merge' | 'new' | 'cancel'. */
+function askMergeOrder(o, newIds){
+  return new Promise(resolve=>{
+    const names = o.testIds.map(id=>testDisplayName(testById(id))).filter(Boolean);
+    const already = newIds.filter(id=>o.testIds.includes(id)).map(id=>testDisplayName(testById(id)));
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;background:rgba(12,30,28,.45);display:flex;align-items:center;justify-content:center;z-index:60;padding:20px';
+    box.innerHTML = `<div class="modal" style="max-width:460px"><div class="modal-body" style="padding-top:22px">
+        <p style="font-size:15px;font-weight:800;margin-bottom:8px">${escapeHtml(patientName(o.patientId))} عنده طلب اليوم #${o.no}</p>
+        <p style="font-size:13px;color:var(--ink-soft);margin-bottom:6px">فيه: <span dir="ltr">${escapeHtml(names.join('، ') || '—')}</span></p>
+        ${o.status==='completed' ? '<p style="font-size:12.5px;color:var(--accent);margin-bottom:6px">الطلب مكتمل — عند الإضافة يرجع "قيد الانتظار" لإدخال نتائج الفحوصات الجديدة.</p>' : ''}
+        ${o.paymentStatus==='paid' ? '<p style="font-size:12.5px;color:var(--accent);margin-bottom:6px">الفاتورة مدفوعة — خذ من المريض فرق سعر الفحوصات الجديدة.</p>' : ''}
+        ${already.length ? `<p style="font-size:12.5px;color:var(--ink-soft)">موجود مسبقاً بالطلب وما رح يتكرر: <span dir="ltr">${escapeHtml(already.join('، '))}</span></p>` : ''}
+        <p style="font-size:14px;margin-top:10px">بدك تضيف الفحوصات الجديدة على نفس الطلب؟</p></div>
+      <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-ghost" data-v="cancel">إلغاء</button>
+        <button class="btn btn-outline" data-v="new">طلب جديد منفصل</button>
+        <button class="btn btn-primary" data-v="merge">➕ إضافة على الطلب #${o.no}</button></div></div>`;
+    document.body.appendChild(box);
+    box.querySelectorAll('button[data-v]').forEach(b=> b.onclick = ()=>{ box.remove(); resolve(b.dataset.v); });
+  });
+}
+async function mergeIntoOrder(o, testIds, prices, discount){
+  const added = testIds.filter(id=>!o.testIds.includes(id));
+  if(!added.length){ showToast(`كل هذه الفحوصات موجودة بالطلب #${o.no}`); closeModal(); openResultsModal(o.id); return; }
+  o.prices = o.prices || {};
+  added.forEach(id=>{ o.testIds.push(id); o.prices[id] = prices[id] != null ? prices[id] : (testById(id)?.price||0); });
+  if(discount) o.discount = (Number(o.discount)||0) + discount;
+  if(o.status === 'completed') o.status = 'pending';
+  await save('orders');
+  closeModal(); switchTab('orders');
+  showToast(`تمت إضافة ${added.length} فحص على الطلب #${o.no}`);
+  logAudit('إضافة فحوصات لطلب', `#${o.no}: ${added.map(id=>testDisplayName(testById(id))).join('، ')}`);
 }
 async function deleteOrder(id){
   if(!confirm('هل تريد حذف هذا الطلب نهائياً؟')) return;
