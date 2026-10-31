@@ -533,7 +533,7 @@
         </div>
       </div>
       <p id="sb-lab-sub">نظام إدارة التحاليل الطبية</p>
-      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 2.9 — 31/10/2026</div>
+      <div style="font-size:10.5px;color:var(--sidebar-text);opacity:.6;margin-top:4px" class="app-version-label">الإصدار 3.0 — 31/10/2026</div>
       <div id="db-status" style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--sidebar-text);opacity:.85">
         <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#8FBFB8;display:inline-block"></span>
         <span id="db-text">جارِ الاتصال...</span>
@@ -608,7 +608,7 @@
       <div class="field"><label>تأكيد كلمة المرور</label><input id="np-2" type="password" class="text-input" autocomplete="new-password" onkeydown="if(event.key==='Enter') finishMigration()"></div>
       <button class="btn btn-primary" id="np-btn" style="width:100%;justify-content:center" onclick="finishMigration()">حفظ وتسجيل الدخول</button>
     </div>
-    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 2.9 — 31/10/2026</div>
+    <div id="app-version" style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:center" class="app-version-label">الإصدار 3.0 — 31/10/2026</div>
   </div>
 </div>
 
@@ -3085,6 +3085,7 @@ function openOrderDetail(id){ openResultsModal(id); }
 
 function openResultsModal(orderId){
   const o = state.orders.find(x=>x.id===orderId);
+  window._openResultsOrderId = orderId;
   const patient = state.patients.find(p=>p.id===o.patientId);
   const gender = patient ? patient.gender : null;
 
@@ -3200,6 +3201,86 @@ function previousResultFor(patientId, testId, excludeOrderId){
   if(prevOrders.length===0) return null;
   return { value: prevOrders[0].results[testId].value, date: prevOrders[0].date };
 }
+/* ===== Result plausibility: catches typing mistakes (e.g. Hb 140 instead of 14.0) ===== */
+const PLAUSIBLE = {
+  'hemoglobin (hb)':[2,25], 'hematocrit (hct)':[6,75], 'red blood cell count (rbc)':[0.5,10], 'white blood cell count (wbc)':[0.1,200],
+  'platelet count (plt)':[1,2000], 'mean corpuscular volume (mcv)':[50,150], 'mean corpuscular hemoglobin (mch)':[10,50],
+  'mean corpuscular hemoglobin concentration (mchc)':[20,45], 'red cell distribution width (rdw-cv)':[8,35], 'mean platelet volume (mpv)':[4,20],
+  'neutrophils %':[0,100], 'lymphocytes %':[0,100], 'monocytes %':[0,100], 'eosinophils %':[0,100], 'basophils %':[0,100],
+  'erythrocyte sedimentation rate (esr)':[0,150], 'reticulocyte count':[0,40],
+  'fasting blood sugar (fbs)':[10,1500], 'random blood sugar (rbs)':[10,1500], 'ogtt fasting glucose':[10,1500], 'ogtt 1-hour glucose':[10,1500],
+  'ogtt 2-hour glucose':[10,1500], 'homa-ir fasting glucose':[10,1500], 'hba1c (glycated hemoglobin)':[3,20],
+  'urea':[1,400], 'blood urea nitrogen (bun)':[1,200], 'creatinine':[0.1,25], 'uric acid':[0.5,25],
+  'alt (sgpt)':[0,10000], 'ast (sgot)':[0,10000], 'alkaline phosphatase (alp)':[5,3000], 'ggt':[0,5000],
+  'total bilirubin':[0,50], 'direct bilirubin':[0,40], 'total protein':[2,15], 'albumin':[0.5,7],
+  'total cholesterol':[30,1000], 'triglycerides':[10,5000], 'hdl cholesterol':[5,200], 'ldl cholesterol':[5,600], 'vldl cholesterol':[1,1000],
+  'sodium (na)':[90,200], 'potassium (k)':[1,10], 'chloride (cl)':[60,150], 'calcium':[3,20], 'phosphorus':[0.3,15], 'magnesium':[0.3,10],
+  'tsh':[0,500], 'free t4':[0,10], 'free t3':[0,30], 'vitamin d (25-oh)':[1,300], 'vitamin b12':[50,3000], 'ferritin':[1,20000],
+  'serum iron':[5,1000], 'c-reactive protein (crp)':[0,500], 'inr':[0.5,15], 'prothrombin time (pt)':[5,150], 'partial thromboplastin time (ptt)':[10,250],
+  'urine ph':[4,9.5], 'urine specific gravity':[1,1.06], 'semen ph':[6,9], 'semen volume':[0,15]
+};
+/* Returns a short Arabic reason if the value looks impossible / mistyped, else '' */
+function plausibilityIssue(t, value){
+  const v0 = String(value==null?'':value).trim(); if(!v0) return '';
+  const range = activeRefRange(t, null);
+  const looksNumeric = !!range || PLAUSIBLE[((t.nameEn||t.name||'')+'').trim().toLowerCase()];
+  if(!looksNumeric) return '';
+  const raw = v0.replace(/^[<>≤≥]\s*/,'');
+  if(!/^-?\d+(\.\d+)?$/.test(raw.replace(/,/g,''))) return 'الرقم مكتوب بشكل غير صحيح';
+  const v = parseFloat(raw.replace(/,/g,''));
+  if(v < 0) return 'قيمة سالبة';
+  const lim = PLAUSIBLE[((t.nameEn||t.name||'')+'').trim().toLowerCase()];
+  if(lim && (v < lim[0] || v > lim[1])) return `قيمة غير منطقية (عادةً بين ${lim[0]} و ${lim[1]}) — تأكد من الفاصلة العشرية`;
+  return '';
+}
+/* Checks between related results in the same order (needs the values typed so far) */
+function crossChecks(o, valOf){
+  const issues = [];
+  const id = n => { const t = state.tests.find(x=>((x.nameEn||x.name||'')+'').trim().toLowerCase()===n); return t && o.testIds.includes(t.id) ? t.id : null; };
+  const num = n => { const i = id(n); if(!i) return null; const v = parseFloat(String(valOf(i)||'').replace(/^[<>≤≥]\s*/,'')); return isNaN(v) ? null : v; };
+  const tb = num('total bilirubin'), db = num('direct bilirubin');
+  if(tb!=null && db!=null && db > tb) issues.push('Direct Bilirubin أكبر من Total Bilirubin');
+  const tc = num('total cholesterol'), hdl = num('hdl cholesterol'), ldl = num('ldl cholesterol');
+  if(tc!=null && hdl!=null && hdl >= tc) issues.push('HDL أكبر من Total Cholesterol');
+  if(tc!=null && ldl!=null && ldl >= tc) issues.push('LDL أكبر من Total Cholesterol');
+  const tp = num('total protein'), alb = num('albumin');
+  if(tp!=null && alb!=null && alb >= tp) issues.push('Albumin أكبر من Total Protein');
+  const tpsa = num('total psa'), fpsa = num('free psa');
+  if(tpsa!=null && fpsa!=null && fpsa > tpsa) issues.push('Free PSA أكبر من Total PSA');
+  const diff = ['neutrophils %','lymphocytes %','monocytes %','eosinophils %','basophils %'].map(num);
+  if(diff.filter(x=>x!=null).length >= 3){ const sum = diff.reduce((a,x)=>a+(x||0),0); if(Math.abs(sum-100) > 3) issues.push(`مجموع الـ Differential = ${Math.round(sum*10)/10}% (لازم يكون ~100%)`); }
+  return issues;
+}
+/* Big jump from the patient's previous result (e.g. ×3) */
+function deltaIssue(o, tid, value){
+  const prev = previousResultFor(o.patientId, tid, o.id); if(!prev) return '';
+  const a = parseFloat(String(prev.value).replace(/^[<>≤≥]\s*/,'')), b = parseFloat(String(value).replace(/^[<>≤≥]\s*/,''));
+  if(isNaN(a) || isNaN(b) || a <= 0 || b <= 0) return '';
+  const r = b / a;
+  return (r >= 3 || r <= 1/3) ? `تغيّر كبير عن النتيجة السابقة (${prev.value})` : '';
+}
+function showPlausibility(testId){
+  const input = document.querySelector(`input[data-test="${testId}"]`); if(!input) return;
+  const t = testById(testId); const o = state.orders.find(x=>x.id===window._openResultsOrderId);
+  const msg = plausibilityIssue(t, input.value) || (o ? deltaIssue(o, testId, input.value) : '');
+  let el = document.getElementById('plaus-'+testId);
+  if(!el){ el = document.createElement('div'); el.id = 'plaus-'+testId; el.style.cssText = 'font-size:11.5px;font-weight:700;color:#B45309;margin-top:3px'; const f = document.getElementById('flag-'+testId); if(f) f.appendChild(el); }
+  el.textContent = msg ? '⚠️ ' + msg : '';
+  input.style.outline = msg ? '2px solid #F59E0B' : '';
+}
+function askConfirmBox(title, lines, okLabel, cancelLabel){
+  return new Promise(resolve=>{
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;background:rgba(12,30,28,.45);display:flex;align-items:center;justify-content:center;z-index:70;padding:20px';
+    box.innerHTML = `<div class="modal" style="max-width:500px"><div class="modal-body" style="padding-top:22px">
+      <p style="font-size:15.5px;font-weight:800;color:#B45309;margin-bottom:10px">${title}</p>
+      <ul style="font-size:13.5px;line-height:1.8;padding-inline-start:18px">${lines.map(l=>`<li>${escapeHtml(l)}</li>`).join('')}</ul></div>
+      <div class="modal-foot"><button class="btn btn-ghost" data-v="0">${cancelLabel||'رجوع للتصحيح'}</button><button class="btn btn-primary" data-v="1">${okLabel||'متأكدة — احفظ'}</button></div></div>`;
+    document.body.appendChild(box);
+    box.querySelectorAll('button[data-v]').forEach(b=> b.onclick = ()=>{ box.remove(); resolve(b.dataset.v==='1'); });
+  });
+}
+
 function onResultInput(testId, isNumeric, gender){
   const input = document.querySelector(`input[data-test="${testId}"]`);
   const t = testById(testId);
@@ -3209,6 +3290,7 @@ function onResultInput(testId, isNumeric, gender){
     input.classList.remove('flag-normal','flag-high','flag-low','flag-critical-high','flag-critical-low');
     if(flag) input.classList.add('flag-'+flag);
   }
+  showPlausibility(testId);
   autoCalcDerived();
 }
 /* Calculated results: HOMA-IR = glucose (mg/dL) x insulin / 405 ; ACR (mg/g) = albumin (mg/L) / creatinine (mg/dL) x 100 */
@@ -3366,6 +3448,17 @@ async function saveResults(orderId){
     }
   });
   o.notes = document.getElementById('rf-notes').value.trim();
+  const odd = [];
+  o.testIds.forEach(tid=>{
+    const t = testById(tid), v = o.results[tid] && o.results[tid].value; if(!t || !v) return;
+    const m = plausibilityIssue(t, v) || deltaIssue(o, tid, v);
+    if(m) odd.push(`${testDisplayName(t)} = ${v}: ${m}`);
+  });
+  crossChecks(o, tid => o.results[tid] && o.results[tid].value).forEach(m=>odd.push(m));
+  if(odd.length){
+    const ok = await askConfirmBox('⚠️ نتائج تحتاج تأكيد قبل الحفظ', odd);
+    if(!ok){ showToast('راجعي القيم المؤشّر عليها باللون البرتقالي'); return; }
+  }
   if(criticals.length){
     const list = criticals.map(c=>`• ${c.name}: ${c.value} (المعدل ${c.label})`).join('\n');
     const ok = confirm('تنبيه — قيم حرجة:\n\n' + list + '\n\nهذه النتائج خارج المعدل الطبيعي بشكل خطير.\nتأكد من صحة النتيجة قبل الاعتماد.\n\nهل تريد حفظ النتائج وإتمام الطلب؟');
