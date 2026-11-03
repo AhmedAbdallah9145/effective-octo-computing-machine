@@ -431,7 +431,7 @@
   .doc-title h2{font-size:20px;color:#0A4642;font-weight:900;}
   .doc-badge{background:#E4EFEE;color:#0A4642;border:1px solid #BFD9D5;border-radius:20px;padding:5px 14px;font-size:11.5px;font-weight:800;}
 
-  .doc-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+  .doc-meta{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;margin-bottom:16px;}
   .doc-meta-box{background:#F7FAF9;border:1px solid #DCE3E1;border-radius:8px;padding:8px 11px;font-size:12px;}
   .doc-meta-box span{display:block;color:#718186;font-size:10.5px;margin-bottom:1px;}
   .doc-meta-box strong{font-size:13px;color:#203A3E;}
@@ -2811,6 +2811,10 @@ function openOrderModal(preselectPatientId){
           ${state.patients.map(p=>`<option value="${p.id}" ${preselectPatientId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
         </select>
       </div>
+      <div class="field"><label>اسم الطبيب المحوِّل (اختياري) — يظهر في ترويسة التقرير</label>
+        <input class="text-input" id="of-doctor" list="doctor-names" placeholder="مثال: د. محمد أحمد">
+        <datalist id="doctor-names">${[...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))].map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist>
+      </div>
       ${state.patients.length===0?`<p style="font-size:12.5px;color:var(--danger);margin-bottom:10px">لا يوجد مرضى مسجلون بعد. أضف مريضاً أولاً من تبويب "المرضى".</p>`:''}
       <div class="field">
         <label>التحاليل المطلوبة * — اكتب أول حرف من اسم التحليل بالإنجليزي لعرض القائمة</label>
@@ -3031,7 +3035,8 @@ async function saveOrder(){
   const order = {
     id: uid(), no: state.settings.nextOrderNo, invoiceNo: state.settings.nextInvoiceNo, patientId, testIds,
     date: new Date().toISOString(), status:'pending', results:{}, paymentStatus:'unpaid', discount, prices,
-    insuranceId: insuranceId || null
+    insuranceId: insuranceId || null,
+    doctorName: ((document.getElementById('of-doctor')||{}).value||'').trim()
   };
   state.orders.push(order);
   state.settings.nextOrderNo += 1;
@@ -3183,6 +3188,7 @@ function openResultsModal(orderId){
       <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px">الوحدة والمعدل الطبيعي قابلان للتعديل مباشرة لكل تحليل (يخص هذا الطلب فقط). زر "✎ المعدل" بجانب الاسم لتعديله لكل الطلبات حسب جهاز الفحص (يبقى محفوظاً ولا يتغير بالتحديثات).</div>
       ${addBox}
       ${groupsHtml}
+      <div class="field" style="margin-top:6px"><label>اسم الطبيب المحوِّل (يظهر في ترويسة التقرير)</label><input class="text-input" id="rf-doctor" value="${o.doctorName?escapeHtml(o.doctorName):''}" placeholder="مثال: د. محمد أحمد"></div>
       <div class="field" style="margin-top:6px"><label>ملاحظات</label><textarea id="rf-notes" rows="2">${o.notes?escapeHtml(o.notes):''}</textarea></div>
     </div>
     <div class="modal-foot">
@@ -3321,6 +3327,7 @@ function captureResultsDraft(o){
     else { const m = document.getElementById('manual-'+tid); o.results[tid] = Object.assign({ value, manualFlag: m ? m.value : '' }, ov); }
   });
   const nt = document.getElementById('rf-notes'); if(nt) o.notes = nt.value.trim();
+  const dr = document.getElementById('rf-doctor'); if(dr) o.doctorName = dr.value.trim();
 }
 function renderAddToOrderResults(orderId, query){
   const box = document.getElementById('rf-add-suggestions'); if(!box) return;
@@ -3448,6 +3455,7 @@ async function saveResults(orderId){
     }
   });
   o.notes = document.getElementById('rf-notes').value.trim();
+  { const dr = document.getElementById('rf-doctor'); if(dr) o.doctorName = dr.value.trim(); }
   const odd = [];
   o.testIds.forEach(tid=>{
     const t = testById(tid), v = o.results[tid] && o.results[tid].value; if(!t || !v) return;
@@ -3978,7 +3986,7 @@ const DOC_STR = {
   ar: {
     reportTitle:'تقرير نتائج تحاليل', reportBadge:'MEDICAL LABORATORY REPORT',
     invoiceTitle:'فاتورة مريض', invoiceBadge:'MEDICAL LABORATORY INVOICE',
-    orderNo:'رقم الطلب', testTime:'وقت الفحص', invoiceNo:'رقم الفاتورة', date:'التاريخ',
+    orderNo:'رقم الطلب', testTime:'وقت الفحص', invoiceNo:'رقم الفاتورة', date:'التاريخ', doctor:'الطبيب المحوِّل',
     patientTitle:'بيانات المريض', pName:'اسم المريض', pAge:'العمر', pGender:'الجنس', pPhone:'الهاتف',
     pGenderM:'ذكر', pGenderF:'أنثى', insurance:'شركة التأمين: ',
     thNo:'#', thTest:'التحليل', thResult:'النتيجة', thUnit:'الوحدة', thRange:'المعدل الطبيعي', thFlag:'التقييم', thPrice:'السعر',
@@ -3990,7 +3998,7 @@ const DOC_STR = {
   en: {
     reportTitle:'Laboratory Results Report', reportBadge:'MEDICAL LABORATORY REPORT',
     invoiceTitle:'Patient Invoice', invoiceBadge:'MEDICAL LABORATORY INVOICE',
-    orderNo:'Order No.', testTime:'Test Time', invoiceNo:'Invoice No.', date:'Date',
+    orderNo:'Order No.', testTime:'Test Time', invoiceNo:'Invoice No.', date:'Date', doctor:'Doctor Name',
     patientTitle:'Patient Information', pName:'Patient Name', pAge:'Age', pGender:'Gender', pPhone:'Phone',
     pGenderM:'Male', pGenderF:'Female', insurance:'Insurance: ',
     thNo:'#', thTest:'Test', thResult:'Result', thUnit:'Unit', thRange:'Reference Range', thFlag:'Status', thPrice:'Price',
@@ -4115,6 +4123,7 @@ function buildReportHTML(orderId, resultsOnly){
       <div class="doc-meta">
         <div class="doc-meta-box"><span>${L.testTime}</span><strong dir="ltr">${new Date(o.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong></div>
         <div class="doc-meta-box"><span>${L.date}</span><strong>${fmtDate(todayISO(), docLang())}</strong></div>
+        ${o.doctorName ? `<div class="doc-meta-box"><span>${L.doctor}</span><strong>${escapeHtml(o.doctorName)}</strong></div>` : ''}
       </div>
 
       ${buildDocPatientCard(patient, o, L)}
