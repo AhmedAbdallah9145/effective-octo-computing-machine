@@ -432,6 +432,8 @@
   .doc-badge{background:#E4EFEE;color:#0A4642;border:1px solid #BFD9D5;border-radius:20px;padding:5px 14px;font-size:11.5px;font-weight:800;}
 
   .doc-meta{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;margin-bottom:16px;}
+  .doc-table td.prev-col{color:#6B7B80;}
+  .doc-table td.prev-col .prev-date{font-size:0.72em;color:#97A5A9;margin-top:1px;}
   .doc-meta-box{background:#F7FAF9;border:1px solid #DCE3E1;border-radius:8px;padding:8px 11px;font-size:12px;}
   .doc-meta-box span{display:block;color:#718186;font-size:10.5px;margin-bottom:1px;}
   .doc-meta-box strong{font-size:13px;color:#203A3E;}
@@ -4015,7 +4017,7 @@ const DOC_STR = {
     orderNo:'رقم الطلب', testTime:'وقت الفحص', invoiceNo:'رقم الفاتورة', date:'التاريخ', doctor:'الطبيب المحوِّل',
     patientTitle:'بيانات المريض', pName:'اسم المريض', pAge:'العمر', pGender:'الجنس', pPhone:'الهاتف',
     pGenderM:'ذكر', pGenderF:'أنثى', insurance:'شركة التأمين: ',
-    thNo:'#', thTest:'التحليل', thResult:'النتيجة', thUnit:'الوحدة', thRange:'المعدل الطبيعي', thFlag:'التقييم', thPrice:'السعر',
+    thNo:'#', thTest:'التحليل', thResult:'النتيجة', thUnit:'الوحدة', thRange:'المعدل الطبيعي', thFlag:'التقييم', thPrice:'السعر', thPrev:'النتيجة السابقة',
     discount:'الخصم', sum:'المجموع', totalDue:'الإجمالي المستحق', payStatus:'حالة الدفع', paid:'مسدد', unpaid:'غير مسدد',
     notes:'ملاحظات:', tech:'التوقيع', license:'رقم الترخيص',
     footerStrong:'شكراً لزيارتكم — ', footerSpan:'نتمنى لكم دوام الصحة والعافية',
@@ -4027,7 +4029,7 @@ const DOC_STR = {
     orderNo:'Order No.', testTime:'Test Time', invoiceNo:'Invoice No.', date:'Date', doctor:'Doctor Name',
     patientTitle:'Patient Information', pName:'Patient Name', pAge:'Age', pGender:'Gender', pPhone:'Phone',
     pGenderM:'Male', pGenderF:'Female', insurance:'Insurance: ',
-    thNo:'#', thTest:'Test', thResult:'Result', thUnit:'Unit', thRange:'Reference Range', thFlag:'Status', thPrice:'Price',
+    thNo:'#', thTest:'Test', thResult:'Result', thUnit:'Unit', thRange:'Reference Range', thFlag:'Status', thPrice:'Price', thPrev:'Previous',
     discount:'Discount', sum:'Subtotal', totalDue:'Total Due', payStatus:'Payment', paid:'Paid', unpaid:'Unpaid',
     notes:'Notes:', tech:'Signature', license:'License No.',
     footerStrong:'Thank you for visiting — ', footerSpan:'We wish you continued health',
@@ -4055,7 +4057,7 @@ function buildDocPatientCard(patient, o, L){
 
 /* Builds the per-test row cells shared by both documents.
    withPrice=true appends the price cell (invoice only). */
-function buildDocTestRow(tid, index, o, gender, withPrice){
+function buildDocTestRow(tid, index, o, gender, withPrice, withPrev){
   const t = testById(tid); if(!t) return '';
   const r = (o.results && o.results[tid]) || {};
   const te = effTest(t, r);
@@ -4073,11 +4075,20 @@ function buildDocTestRow(tid, index, o, gender, withPrice){
   const isCritical = flag==='critical-high' || flag==='critical-low';
   const abn = ['high','low','critical-high','critical-low'].includes(flag);
   const arrow = (flag==='high'||flag==='critical-high') ? ' ↑' : ((flag==='low'||flag==='critical-low') ? ' ↓' : '');
+  let prevCell = '';
+  if(withPrev){
+    const pv = previousResultFor(o.patientId, tid, o.id);
+    const pf = pv ? ({high:' ↑',low:' ↓','critical-high':' ↑','critical-low':' ↓'}[pv.flag]||'') : '';
+    const pd = pv ? new Date(pv.date) : null;
+    const pds = pd ? `${String(pd.getDate()).padStart(2,'0')}/${String(pd.getMonth()+1).padStart(2,'0')}/${pd.getFullYear()}` : '';
+    prevCell = `<td class="center prev-col">${pv ? `<span dir="ltr">${escapeHtml(pv.value)}${pf}</span><div class="prev-date" dir="ltr">${pds}</div>` : '—'}</td>`;
+  }
   const priceCell = withPrice ? `<td class="price-col">${fmtMoney((o.prices && o.prices[tid]!=null) ? o.prices[tid] : (t.price||0))}</td>` : '';
   return `<tr${isCritical?' class="flag-critical"':''}>
       <td>${index+1}</td>
       <td><strong dir="ltr">${escapeHtml(testDisplayName(t))}</strong></td>
       <td class="center${abn?' abn':''}">${escapeHtml(r.value!=null && r.value!=='' ? r.value : '—')}${arrow}</td>
+      ${prevCell}
       <td>${escapeHtml(te.unit||'—')}</td>
       <td${String(refDisplay).includes(' | ')?' style="font-size:0.82em;line-height:1.35"':''}>${escapeHtml(refDisplay).split(' | ').join('<br>')}</td>
       <td>${escapeHtml(flagText)}</td>
@@ -4115,15 +4126,20 @@ function buildReportSections(o, gender, L){
   const byCat = {};
   o.testIds.forEach(tid=>{ const t = testById(tid); if(!t) return; const c = t.category || 'عام'; (byCat[c] = byCat[c] || []).push(tid); });
   const cats = Object.keys(byCat).sort((a,b)=>a.localeCompare(b,'ar'));
+  // "Previous" column appears only when this patient has at least one earlier result for these tests
+  const withPrev = o.testIds.some(tid=> !!previousResultFor(o.patientId, tid, o.id));
   let index = 0;
   return cats.map(cat=>{
     const c = categoryColor(cat);
-    const rows = byCat[cat].map(tid=> buildDocTestRow(tid, index++, o, gender, false)).join('');
+    const rows = byCat[cat].map(tid=> buildDocTestRow(tid, index++, o, gender, false, withPrev)).join('');
+    const cols = withPrev
+      ? '<col style="width:5%"><col style="width:27%"><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:20%"><col style="width:11%">'
+      : '<col style="width:6%"><col style="width:30%"><col style="width:16%"><col style="width:12%"><col style="width:22%"><col style="width:14%">';
     return `<table class="doc-table doc-section">
-      <colgroup><col style="width:6%"><col style="width:30%"><col style="width:16%"><col style="width:12%"><col style="width:22%"><col style="width:14%"></colgroup>
+      <colgroup>${cols}</colgroup>
       <thead>
-        <tr class="doc-cat-row"><td colspan="6" style="background:${c.bg};color:${c.fg}">${escapeHtml(cat)}</td></tr>
-        <tr><th>#</th><th>${L.thTest}</th><th class="center">${L.thResult}</th><th>${L.thUnit}</th><th>${L.thRange}</th><th>${L.thFlag}</th></tr>
+        <tr class="doc-cat-row"><td colspan="${withPrev?7:6}" style="background:${c.bg};color:${c.fg}">${escapeHtml(cat)}</td></tr>
+        <tr><th>#</th><th>${L.thTest}</th><th class="center">${L.thResult}</th>${withPrev?`<th class="center">${L.thPrev}</th>`:''}<th>${L.thUnit}</th><th>${L.thRange}</th><th>${L.thFlag}</th></tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
