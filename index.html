@@ -3119,7 +3119,8 @@ function openResultsModal(orderId){
       const refInputVal = r.refOv || defaultRefInput(t, gender);
       const unitInputVal = r.unitOv || t.unit || '';
       const prev = previousResultFor(o.patientId, tid, o.id);
-      const prevHint = prev ? `<div class="rref" style="color:var(--accent);font-weight:700">آخر نتيجة سابقة: ${escapeHtml(prev.value)} (${fmtDate(prev.date)})</div>` : '';
+      const prevFlag = {high:' ↑',low:' ↓','critical-high':' ↑↑','critical-low':' ↓↓'}[prev && prev.flag] || '';
+      const prevHint = prev ? `<div class="prev-result" title="آخر نتيجة لنفس التحليل لهذا المريض" style="display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:2px 8px;border-radius:6px;background:#FFF6E5;border:1px solid #F2D49B;color:#8A5A00;font-size:12px;font-weight:700">🕘 السابقة: <span dir="ltr">${escapeHtml(prev.value)}${prevFlag} ${escapeHtml(prev.unit||'')}</span> <span style="font-weight:500;color:#9B7A3A">(${fmtDate(prev.date)})</span></div>` : '';
       const initialFlag = isNumeric ? computeFlag(te, r.value, gender) : null;
       const flagClass = initialFlag ? `flag-${initialFlag}` : '';
       const opts = resultOptionsFor(t);
@@ -3201,11 +3202,36 @@ function openResultsModal(orderId){
   openModal();
 }
 function previousResultFor(patientId, testId, excludeOrderId){
-  const prevOrders = state.orders
-    .filter(o => o.patientId===patientId && o.id!==excludeOrderId && o.status==='completed' && o.results && o.results[testId] && o.results[testId].value)
-    .sort((a,b)=> b.date.localeCompare(a.date));
-  if(prevOrders.length===0) return null;
-  return { value: prevOrders[0].results[testId].value, date: prevOrders[0].date };
+  // Same patient = same record, or a re-registered record with the same phone / same name
+  const me = state.patients.find(p=>p.id===patientId) || {};
+  const norm = v => String(v||'').replace(/\s+/g,' ').trim().toLowerCase();
+  const digits = v => String(v||'').replace(/\D/g,'').slice(-9);
+  const samePatient = pid => {
+    if(pid===patientId) return true;
+    const p = state.patients.find(x=>x.id===pid); if(!p) return false;
+    if(digits(me.phone).length>=7 && digits(p.phone)===digits(me.phone)) return true;
+    // same name only counts when phones can't tell them apart, and gender doesn't conflict
+    if(digits(me.phone).length>=7 && digits(p.phone).length>=7) return false;
+    if(me.gender && p.gender && me.gender!==p.gender) return false;
+    return !!norm(me.name) && norm(p.name)===norm(me.name);
+  };
+  // Same test = same id, or a test with the same English name
+  const t = testById(testId);
+  const tName = t ? norm(t.nameEn||t.name) : '';
+  const cur = state.orders.find(o=>o.id===excludeOrderId);
+  const curDate = cur ? String(cur.date||'') : '9999';
+  let best = null;
+  state.orders.forEach(o=>{
+    if(o.id===excludeOrderId || !o.results || !samePatient(o.patientId)) return;
+    if(String(o.date||'') >= curDate) return;   // only results from BEFORE this order
+    Object.keys(o.results).forEach(tid=>{
+      const r = o.results[tid];
+      if(!r || r.value==null || String(r.value).trim()==='') return;
+      if(tid!==testId){ const ot = testById(tid); if(!ot || !tName || norm(ot.nameEn||ot.name)!==tName) return; }
+      if(!best || String(o.date) > String(best.date)) best = { value: r.value, date: o.date, flag: r.flag||r.manualFlag||'', unit: r.unitOv || (t&&t.unit) || '' };
+    });
+  });
+  return best;
 }
 /* ===== Result plausibility: catches typing mistakes (e.g. Hb 140 instead of 14.0) ===== */
 const PLAUSIBLE = {
