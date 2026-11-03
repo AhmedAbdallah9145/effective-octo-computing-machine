@@ -4165,7 +4165,7 @@ function buildReportHTML(orderId, resultsOnly){
       <div class="doc-meta">
         <div class="doc-meta-box"><span>${L.testTime}</span><strong dir="ltr">${new Date(o.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong></div>
         <div class="doc-meta-box"><span>${L.date}</span><strong>${fmtDate(todayISO(), docLang())}</strong></div>
-        ${o.doctorName ? `<div class="doc-meta-box"><span>${L.doctor}</span><strong>${escapeHtml(o.doctorName)}</strong></div>` : ''}
+        <div class="doc-meta-box"><span>${L.doctor}</span><strong>${o.doctorName ? escapeHtml(o.doctorName) : '&nbsp;'}</strong></div>
       </div>
 
       ${buildDocPatientCard(patient, o, L)}
