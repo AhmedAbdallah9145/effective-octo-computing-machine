@@ -3191,7 +3191,7 @@ function openResultsModal(orderId){
       <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px">الوحدة والمعدل الطبيعي قابلان للتعديل مباشرة لكل تحليل (يخص هذا الطلب فقط). زر "✎ المعدل" بجانب الاسم لتعديله لكل الطلبات حسب جهاز الفحص (يبقى محفوظاً ولا يتغير بالتحديثات).</div>
       ${addBox}
       ${groupsHtml}
-      <div class="field" style="margin-top:6px"><label>اسم الطبيب المحوِّل (يظهر في ترويسة التقرير)</label><input class="text-input" id="rf-doctor" value="${o.doctorName?escapeHtml(o.doctorName):''}" placeholder="مثال: د. محمد أحمد"></div>
+      <div class="field" style="margin-top:6px"><label>اسم الطبيب المحوِّل (يظهر في ترويسة التقرير)</label><input class="text-input" id="rf-doctor" list="rf-doctor-names" value="${o.doctorName?escapeHtml(o.doctorName):''}" placeholder="مثال: د. محمد أحمد"><datalist id="rf-doctor-names">${[...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))].map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist></div>
       <div class="field" style="margin-top:6px"><label>ملاحظات</label><textarea id="rf-notes" rows="2">${o.notes?escapeHtml(o.notes):''}</textarea></div>
     </div>
     <div class="modal-foot">
