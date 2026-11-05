@@ -4269,10 +4269,53 @@ function pageFooterCSS(o){
   const box = 'font-family:Tajawal,sans-serif;font-size:10px;font-weight:700;color:#4a5a5e;vertical-align:top;padding-top:2mm;';
   return `@page{ @bottom-left{ content:"${clean(label)}"; text-align:left; ${box} } @bottom-right{ content:${pageTxt}; text-align:right; ${box} } }`;
 }
-function printReport(orderId, resultsOnly){
+/* Before printing a report with no referring doctor: a small reminder box (on top of any open window)
+   to type the doctor's name, or print without one. */
+function askDoctorThenPrint(orderId, resultsOnly){
+  const o = state.orders.find(x=>x.id===orderId); if(!o) return;
+  const old = document.getElementById('doctor-ask'); if(old) old.remove();
+  const names = [...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))];
+  const box = document.createElement('div');
+  box.id = 'doctor-ask';
+  box.setAttribute('dir','rtl');
+  box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,30,35,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML = `
+    <div role="dialog" aria-modal="true" aria-labelledby="doctor-ask-title" style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:20px 20px 16px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+      <h3 id="doctor-ask-title" style="margin:0 0 6px;font-size:17px">اسم الطبيب المحوِّل فاضي</h3>
+      <p style="margin:0 0 12px;font-size:13px;color:#55666b">إذا الفحص محوَّل من طبيب، اكتب اسمه حتى يظهر في ترويسة التقرير.</p>
+      <label for="doctor-ask-input" style="display:block;font-size:12.5px;margin-bottom:4px">اسم الطبيب</label>
+      <input class="text-input" id="doctor-ask-input" list="doctor-ask-names" placeholder="مثال: د. محمد أحمد" style="width:100%;box-sizing:border-box">
+      <datalist id="doctor-ask-names">${names.map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button type="button" class="btn btn-primary" id="doctor-ask-save">حفظ وطباعة</button>
+        <button type="button" class="btn btn-outline" id="doctor-ask-skip">طباعة بدون طبيب</button>
+        <button type="button" class="btn btn-ghost" id="doctor-ask-cancel">إلغاء</button>
+      </div>
+    </div>`;
+  document.body.appendChild(box);
+  const input = box.querySelector('#doctor-ask-input');
+  const close = () => box.remove();
+  const go = (name) => {
+    close();
+    if(name){
+      o.doctorName = name; save('orders');
+      const rf = document.getElementById('rf-doctor'); if(rf) rf.value = name;   // keep the open results window in step
+      logAudit('إضافة طبيب محوِّل', `#${o.no}: ${name}`);
+    }
+    printReport(orderId, resultsOnly, true);
+  };
+  box.querySelector('#doctor-ask-save').onclick = () => { const v = input.value.trim(); if(!v){ input.focus(); showToast('اكتب اسم الطبيب أو اختر "طباعة بدون طبيب"'); return; } go(v); };
+  box.querySelector('#doctor-ask-skip').onclick = () => go('');
+  box.querySelector('#doctor-ask-cancel').onclick = close;
+  box.addEventListener('click', e => { if(e.target === box) close(); });
+  input.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); box.querySelector('#doctor-ask-save').click(); } else if(e.key==='Escape'){ close(); } });
+  setTimeout(()=>input.focus(), 30);
+}
+function printReport(orderId, resultsOnly, doctorChecked){
   const o = state.orders.find(x=>x.id===orderId);
   // if the results window is open, use what is typed there now (even before pressing Save)
   if(o && o.testIds.some(tid=>document.querySelector(`input[data-test="${tid}"]`))){ captureResultsDraft(o); save('orders'); }
+  if(o && !doctorChecked && !String(o.doctorName||'').trim()){ askDoctorThenPrint(orderId, resultsOnly); return; }
   document.getElementById('print-area').innerHTML = buildReportHTML(orderId, !!resultsOnly);
   const originalTitle = document.title;
   document.title = titleSafeName(`تقرير ${patientName(o.patientId)}`);
