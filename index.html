@@ -4038,6 +4038,14 @@ const DOC_STR = {
 };
 function docStrings(){ return DOC_STR[docLang()]; }
 
+/* English name line on printouts: only when it is really a different, Latin-letter name
+   (an Arabic name typed again in the English field would otherwise print twice) */
+function extraEnName(p){
+  const en = String((p && p.nameEn) || '').trim();
+  if(!en || !/[A-Za-z]/.test(en)) return '';
+  if(en.replace(/\s+/g,' ') === String((p && p.name) || '').trim().replace(/\s+/g,' ')) return '';
+  return en;
+}
 function buildDocPatientCard(patient, o, L){
   L = L || docStrings();
   const insurance = o.insuranceId ? state.insurance.find(i=>i.id===o.insuranceId) : null;
@@ -4045,7 +4053,7 @@ function buildDocPatientCard(patient, o, L){
     <div class="patient-card">
       <div class="patient-card-title">${L.patientTitle}</div>
       <div class="patient-grid">
-        <div><span>${L.pName}</span><strong>${escapeHtml((patient&&patient.name)||patientName(o.patientId))}${patient&&patient.nameEn?`<em dir="ltr" style="display:block;font-style:normal;font-weight:700;margin-top:2px;text-align:start">${escapeHtml(patient.nameEn)}</em>`:''}</strong></div>
+        <div><span>${L.pName}</span><strong>${escapeHtml((patient&&patient.name)||patientName(o.patientId))}${extraEnName(patient)?`<em dir="ltr" style="display:block;font-style:normal;font-weight:700;margin-top:2px;text-align:start">${escapeHtml(extraEnName(patient))}</em>`:''}</strong></div>
         <div><span>${L.pAge}</span><strong>${formatAge(patient, docLang())}</strong></div>
         <div><span>${L.pGender}</span><strong>${patient && patient.gender==='male'?L.pGenderM:patient && patient.gender==='female'?L.pGenderF:'—'}</strong></div>
         <div><span>${L.pPhone}</span><strong dir="ltr">${escapeHtml((patient&&patient.phone)||'—')}</strong></div>
@@ -4255,7 +4263,7 @@ function pageFooterCSS(o){
   const en = docLang()==='en';
   const p = state.patients.find(x=>x.id===o.patientId);
   const nm = (p && p.name) || '';
-  const label = `${nm}${p && p.nameEn ? ' / ' + p.nameEn : ''}`;
+  const label = `${nm}${extraEnName(p) ? ' / ' + extraEnName(p) : ''}`;
   const clean = x => String(x).replace(/["\\\n\r]/g,' ');
   const pageTxt = en ? '"Page " counter(page) " / " counter(pages)' : '"صفحة " counter(page) " من " counter(pages)';
   const box = 'font-family:Tajawal,sans-serif;font-size:10px;font-weight:700;color:#4a5a5e;vertical-align:top;padding-top:2mm;';
