@@ -1520,15 +1520,24 @@ function refDisplay(v){ const p = REF_PRESETS.find(x=>x[0]===String(v||'').trim(
 function doctorNameOptions(){ return [...new Set(state.orders.map(x=>x.doctorName).filter(n=>n && !isRefPreset(n)))].map(d=>`<option value="${escapeHtml(d)}">`).join(''); }
 function refPresetChips(inputId, current){
   const cur = String(current||'').trim();
-  return `<div class="ref-chips" data-for="${inputId}">${REF_PRESETS.map(([ar])=>`<button type="button" class="ref-chip${cur===ar?' on':''}" data-v="${ar}" onclick="setRefPreset('${inputId}','${ar}')">${ar}</button>`).join('')}<button type="button" class="ref-chip" data-v="" onclick="setRefPreset('${inputId}','')">✕ مسح</button></div>`;
+  const isDoc = !!cur && !isRefPreset(cur);
+  return `<div class="ref-chips" data-for="${inputId}"><button type="button" class="ref-chip${isDoc?' on':''}" data-v="__doc" onclick="setRefPreset('${inputId}','__doc')">👨‍⚕️ دكتور</button>${REF_PRESETS.map(([ar])=>`<button type="button" class="ref-chip${cur===ar?' on':''}" data-v="${ar}" onclick="setRefPreset('${inputId}','${ar}')">${ar}</button>`).join('')}<button type="button" class="ref-chip" data-v="" onclick="setRefPreset('${inputId}','')">✕ مسح</button></div>`;
 }
 function refreshRefChips(input){
   const box = document.querySelector(`.ref-chips[data-for="${input.id}"]`); if(!box) return;
   const v = input.value.trim();
-  box.querySelectorAll('.ref-chip').forEach(b=>b.classList.toggle('on', !!b.dataset.v && b.dataset.v===v));
+  box.querySelectorAll('.ref-chip').forEach(b=>b.classList.toggle('on', b.dataset.v==='__doc' ? (!!v && !isRefPreset(v)) : (!!b.dataset.v && b.dataset.v===v)));
 }
 function setRefPreset(inputId, v){
   const input = document.getElementById(inputId); if(!input) return;
+  if(v==='__doc'){
+    if(isRefPreset(input.value)) input.value = '';
+    refreshRefChips(input); input.focus();
+    const box = document.querySelector(`.ref-chips[data-for="${inputId}"]`);
+    const b = box && box.querySelector('[data-v="__doc"]'); if(b) b.classList.add('on');
+    if(input.showPicker){ try{ input.showPicker(); }catch(e){} }
+    return;
+  }
   input.value = v; refreshRefChips(input);
   if(inputId==='doctor-ask-input' && v){ const b=document.getElementById('doctor-ask-save'); if(b) b.click(); return; }
   if(!v) input.focus();
