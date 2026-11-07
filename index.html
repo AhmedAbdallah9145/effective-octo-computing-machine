@@ -325,6 +325,10 @@
   .suggestion-item:hover{ background:var(--primary-light); }
   .suggestion-empty{ padding:10px; font-size:12.5px; color:var(--ink-soft); text-align:center; }
   .selected-tests-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .ref-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .ref-chip{ font:inherit; font-size:12.5px; padding:5px 12px; border:1px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink); cursor:pointer; }
+  .ref-chip:hover{ background:var(--primary-light); }
+  .ref-chip.on{ background:var(--primary); border-color:var(--primary); color:#fff; }
   .test-chip{
     display:flex; align-items:center; gap:10px; padding:8px 10px;
     border:1px solid var(--line); border-radius:8px; background:var(--card);
@@ -1509,6 +1513,27 @@ function showToast(msg){
   clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
 }
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* Referred-by: ready-made choices besides a doctor's name (stored in Arabic, printed in English on English reports) */
+const REF_PRESETS = [['المريض نفسه','Self-referred'],['سحب منزلي','Home visit'],['فحص دوري','Check-up']];
+function isRefPreset(v){ return REF_PRESETS.some(p=>p[0]===String(v||'').trim()); }
+function refDisplay(v){ const p = REF_PRESETS.find(x=>x[0]===String(v||'').trim()); return p ? (docLang()==='en' ? p[1] : p[0]) : v; }
+function doctorNameOptions(){ return [...new Set(state.orders.map(x=>x.doctorName).filter(n=>n && !isRefPreset(n)))].map(d=>`<option value="${escapeHtml(d)}">`).join(''); }
+function refPresetChips(inputId, current){
+  const cur = String(current||'').trim();
+  return `<div class="ref-chips" data-for="${inputId}">${REF_PRESETS.map(([ar])=>`<button type="button" class="ref-chip${cur===ar?' on':''}" data-v="${ar}" onclick="setRefPreset('${inputId}','${ar}')">${ar}</button>`).join('')}<button type="button" class="ref-chip" data-v="" onclick="setRefPreset('${inputId}','')">✕ مسح</button></div>`;
+}
+function refreshRefChips(input){
+  const box = document.querySelector(`.ref-chips[data-for="${input.id}"]`); if(!box) return;
+  const v = input.value.trim();
+  box.querySelectorAll('.ref-chip').forEach(b=>b.classList.toggle('on', !!b.dataset.v && b.dataset.v===v));
+}
+function setRefPreset(inputId, v){
+  const input = document.getElementById(inputId); if(!input) return;
+  input.value = v; refreshRefChips(input);
+  if(inputId==='doctor-ask-input' && v){ const b=document.getElementById('doctor-ask-save'); if(b) b.click(); return; }
+  if(!v) input.focus();
+}
+document.addEventListener('input', e=>{ if(e.target && e.target.matches && e.target.matches('#of-doctor,#rf-doctor,#doctor-ask-input')) refreshRefChips(e.target); });
 
 /* ===================== NAV / RENDER SHELL ===================== */
 function renderNav(){
@@ -2833,9 +2858,10 @@ function openOrderModal(preselectPatientId){
           ${state.patients.map(p=>`<option value="${p.id}" ${preselectPatientId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label>اسم الطبيب المحوِّل (اختياري) — يظهر في ترويسة التقرير</label>
+      <div class="field"><label>محوَّل من (Referred by) — اكتب اسم الطبيب أو اختر من الخيارات</label>
         <input class="text-input" id="of-doctor" list="doctor-names" placeholder="مثال: د. محمد أحمد">
-        <datalist id="doctor-names">${[...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))].map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist>
+        <datalist id="doctor-names">${doctorNameOptions()}</datalist>
+        ${refPresetChips('of-doctor','')}
       </div>
       ${state.patients.length===0?`<p style="font-size:12.5px;color:var(--danger);margin-bottom:10px">لا يوجد مرضى مسجلون بعد. أضف مريضاً أولاً من تبويب "المرضى".</p>`:''}
       <div class="field">
@@ -3211,7 +3237,7 @@ function openResultsModal(orderId){
       <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px">الوحدة والمعدل الطبيعي قابلان للتعديل مباشرة لكل تحليل (يخص هذا الطلب فقط). زر "✎ المعدل" بجانب الاسم لتعديله لكل الطلبات حسب جهاز الفحص (يبقى محفوظاً ولا يتغير بالتحديثات).</div>
       ${addBox}
       ${groupsHtml}
-      <div class="field" style="margin-top:6px"><label>اسم الطبيب المحوِّل (يظهر في ترويسة التقرير)</label><input class="text-input" id="rf-doctor" list="rf-doctor-names" value="${o.doctorName?escapeHtml(o.doctorName):''}" placeholder="مثال: د. محمد أحمد"><datalist id="rf-doctor-names">${[...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))].map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist></div>
+      <div class="field" style="margin-top:6px"><label>محوَّل من (Referred by) — اسم الطبيب أو خيار جاهز</label><input class="text-input" id="rf-doctor" list="rf-doctor-names" value="${o.doctorName?escapeHtml(o.doctorName):''}" placeholder="مثال: د. محمد أحمد"><datalist id="rf-doctor-names">${doctorNameOptions()}</datalist>${refPresetChips('rf-doctor', o.doctorName)}</div>
       <div class="field" style="margin-top:6px"><label>ملاحظات</label><textarea id="rf-notes" rows="2">${o.notes?escapeHtml(o.notes):''}</textarea></div>
     </div>
     <div class="modal-foot">
@@ -4034,7 +4060,7 @@ const DOC_STR = {
   ar: {
     reportTitle:'تقرير نتائج تحاليل', reportBadge:'MEDICAL LABORATORY REPORT',
     invoiceTitle:'فاتورة مريض', invoiceBadge:'MEDICAL LABORATORY INVOICE',
-    orderNo:'رقم الطلب', testTime:'وقت الفحص', invoiceNo:'رقم الفاتورة', date:'التاريخ', doctor:'الطبيب المحوِّل',
+    orderNo:'رقم الطلب', testTime:'وقت الفحص', invoiceNo:'رقم الفاتورة', date:'التاريخ', doctor:'محوَّل من',
     patientTitle:'بيانات المريض', pName:'اسم المريض', pAge:'العمر', pGender:'الجنس', pPhone:'الهاتف',
     pGenderM:'ذكر', pGenderF:'أنثى', insurance:'شركة التأمين: ',
     thNo:'#', thTest:'التحليل', thResult:'النتيجة', thUnit:'الوحدة', thRange:'المعدل الطبيعي', thFlag:'التقييم', thPrice:'السعر', thPrev:'النتيجة السابقة',
@@ -4046,7 +4072,7 @@ const DOC_STR = {
   en: {
     reportTitle:'Laboratory Results Report', reportBadge:'MEDICAL LABORATORY REPORT',
     invoiceTitle:'Patient Invoice', invoiceBadge:'MEDICAL LABORATORY INVOICE',
-    orderNo:'Order No.', testTime:'Test Time', invoiceNo:'Invoice No.', date:'Date', doctor:'Doctor Name',
+    orderNo:'Order No.', testTime:'Test Time', invoiceNo:'Invoice No.', date:'Date', doctor:'Referred by',
     patientTitle:'Patient Information', pName:'Patient Name', pAge:'Age', pGender:'Gender', pPhone:'Phone',
     pGenderM:'Male', pGenderF:'Female', insurance:'Insurance: ',
     thNo:'#', thTest:'Test', thResult:'Result', thUnit:'Unit', thRange:'Reference Range', thFlag:'Status', thPrice:'Price', thPrev:'Previous',
@@ -4193,7 +4219,7 @@ function buildReportHTML(orderId, resultsOnly){
       <div class="doc-meta">
         <div class="doc-meta-box"><span>${L.testTime}</span><strong dir="ltr">${new Date(o.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong></div>
         <div class="doc-meta-box"><span>${L.date}</span><strong>${fmtDate(todayISO(), docLang())}</strong></div>
-        ${o.doctorName ? `<div class="doc-meta-box"><span>${L.doctor}</span><strong>${escapeHtml(o.doctorName)}</strong></div>` : ''}
+        ${o.doctorName ? `<div class="doc-meta-box"><span>${L.doctor}</span><strong>${escapeHtml(refDisplay(o.doctorName))}</strong></div>` : ''}
       </div>
 
       ${buildDocPatientCard(patient, o, L)}
@@ -4294,21 +4320,21 @@ function pageFooterCSS(o){
 function askDoctorThenPrint(orderId, resultsOnly){
   const o = state.orders.find(x=>x.id===orderId); if(!o) return;
   const old = document.getElementById('doctor-ask'); if(old) old.remove();
-  const names = [...new Set(state.orders.map(x=>x.doctorName).filter(Boolean))];
   const box = document.createElement('div');
   box.id = 'doctor-ask';
   box.setAttribute('dir','rtl');
   box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,30,35,.45);display:flex;align-items:center;justify-content:center;padding:16px';
   box.innerHTML = `
     <div role="dialog" aria-modal="true" aria-labelledby="doctor-ask-title" style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:20px 20px 16px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
-      <h3 id="doctor-ask-title" style="margin:0 0 6px;font-size:17px">اسم الطبيب المحوِّل فاضي</h3>
-      <p style="margin:0 0 12px;font-size:13px;color:#55666b">إذا الفحص محوَّل من طبيب، اكتب اسمه حتى يظهر في ترويسة التقرير.</p>
+      <h3 id="doctor-ask-title" style="margin:0 0 6px;font-size:17px">خانة "محوَّل من" فاضية</h3>
+      <p style="margin:0 0 12px;font-size:13px;color:#55666b">اكتب اسم الطبيب، أو اضغط على خيار جاهز ليُحفظ ويُطبع مباشرة.</p>
       <label for="doctor-ask-input" style="display:block;font-size:12.5px;margin-bottom:4px">اسم الطبيب</label>
       <input class="text-input" id="doctor-ask-input" list="doctor-ask-names" placeholder="مثال: د. محمد أحمد" style="width:100%;box-sizing:border-box">
-      <datalist id="doctor-ask-names">${names.map(d=>`<option value="${escapeHtml(d)}">`).join('')}</datalist>
+      <datalist id="doctor-ask-names">${doctorNameOptions()}</datalist>
+      ${refPresetChips('doctor-ask-input','')}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
         <button type="button" class="btn btn-primary" id="doctor-ask-save">حفظ وطباعة</button>
-        <button type="button" class="btn btn-outline" id="doctor-ask-skip">طباعة بدون طبيب</button>
+        <button type="button" class="btn btn-outline" id="doctor-ask-skip">طباعة بدون هذه الخانة</button>
         <button type="button" class="btn btn-ghost" id="doctor-ask-cancel">إلغاء</button>
       </div>
     </div>`;
@@ -4324,7 +4350,7 @@ function askDoctorThenPrint(orderId, resultsOnly){
     }
     printReport(orderId, resultsOnly, true);
   };
-  box.querySelector('#doctor-ask-save').onclick = () => { const v = input.value.trim(); if(!v){ input.focus(); showToast('اكتب اسم الطبيب أو اختر "طباعة بدون طبيب"'); return; } go(v); };
+  box.querySelector('#doctor-ask-save').onclick = () => { const v = input.value.trim(); if(!v){ input.focus(); showToast('اكتب اسم الطبيب أو اختر خياراً جاهزاً'); return; } go(v); };
   box.querySelector('#doctor-ask-skip').onclick = () => go('');
   box.querySelector('#doctor-ask-cancel').onclick = close;
   box.addEventListener('click', e => { if(e.target === box) close(); });
