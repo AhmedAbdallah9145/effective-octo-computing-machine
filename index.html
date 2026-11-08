@@ -3259,18 +3259,17 @@ function openResultsModal(orderId){
   openModal();
 }
 function previousResultFor(patientId, testId, excludeOrderId){
-  // Same patient = same record, or a re-registered record with the same phone / same name
+  // Same patient = same record, or another record with the same NAME (the phone is not used:
+  // a husband and wife can share one mobile number). Gender must not conflict.
   const me = state.patients.find(p=>p.id===patientId) || {};
   const norm = v => String(v||'').replace(/\s+/g,' ').trim().toLowerCase();
-  const digits = v => String(v||'').replace(/\D/g,'').slice(-9);
+  const arName = v => norm(v).replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
   const samePatient = pid => {
     if(pid===patientId) return true;
     const p = state.patients.find(x=>x.id===pid); if(!p) return false;
-    if(digits(me.phone).length>=7 && digits(p.phone)===digits(me.phone)) return true;
-    // same name only counts when phones can't tell them apart, and gender doesn't conflict
-    if(digits(me.phone).length>=7 && digits(p.phone).length>=7) return false;
     if(me.gender && p.gender && me.gender!==p.gender) return false;
-    return !!norm(me.name) && norm(p.name)===norm(me.name);
+    if(arName(me.name) && arName(p.name)===arName(me.name)) return true;
+    return !!norm(me.nameEn) && norm(p.nameEn)===norm(me.nameEn);
   };
   // Same test = same id, or a test with the same English name
   const t = testById(testId);
