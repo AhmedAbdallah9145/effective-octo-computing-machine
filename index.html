@@ -491,6 +491,7 @@
   .lab-doc .doc-table tr{ break-inside:avoid; page-break-inside:avoid; }
   .lab-doc .doc-table thead{ display:table-header-group; }
   .lab-doc .doc-signature, .lab-doc .doc-footer{ break-inside:avoid; page-break-inside:avoid; }
+  .lab-doc.is-report .doc-title, .lab-doc.is-report .doc-meta, .lab-doc.is-report .patient-card{ break-after:avoid; page-break-after:avoid; }
   .lab-doc.is-report .doc-table td.center{ font-weight:500; }
   .lab-doc.is-report .doc-table td.center.abn{ font-weight:900; }
 
@@ -882,6 +883,13 @@ async function loadState(){
     });
     if(n) await save('tests');
     state.settings.addPthCalcitonin = true; await save('settings');
+  }
+  if(state.settings && !state.settings.letterheadV2){
+    // the printed Misk A4 letterhead: header to ~56mm, disclaimer/signature box from ~244mm
+    if(state.settings.letterTop==null || Number(state.settings.letterTop)===45) state.settings.letterTop = 62;
+    if(state.settings.letterBottom==null || Number(state.settings.letterBottom)===25) state.settings.letterBottom = 57;
+    state.settings.letterheadV2 = true;
+    await save('settings');
   }
   if(state.settings && !state.settings.urineBloodV1){
     if(applyUrineBloodV1()) await save('tests');
@@ -3764,8 +3772,8 @@ function openSettingsModal(){
       </div>
       <div class="field"><label>العنوان</label><input class="text-input" id="sf-address" value="${escapeHtml(s.labAddress||'')}"></div>
       <div class="field-row">
-        <div class="field"><label>طباعة النتائج فقط: مسافة فارغة أعلى الورقة (ملم)</label><input class="text-input" type="number" min="0" max="120" id="sf-letter-top" value="${s.letterTop!=null && s.letterTop!=='' ? s.letterTop : 45}"></div>
-        <div class="field"><label>مسافة فارغة أسفل الورقة (ملم)</label><input class="text-input" type="number" min="0" max="120" id="sf-letter-bottom" value="${s.letterBottom!=null && s.letterBottom!=='' ? s.letterBottom : 25}"></div>
+        <div class="field"><label>طباعة النتائج فقط: مسافة فارغة أعلى الورقة (ملم)</label><input class="text-input" type="number" min="0" max="120" id="sf-letter-top" value="${s.letterTop!=null && s.letterTop!=='' ? s.letterTop : 62}"></div>
+        <div class="field"><label>مسافة فارغة أسفل الورقة (ملم)</label><input class="text-input" type="number" min="0" max="120" id="sf-letter-bottom" value="${s.letterBottom!=null && s.letterBottom!=='' ? s.letterBottom : 57}"></div>
       </div>
       <div class="field"><label>حجم خط التقرير المطبوع (النتائج)</label>
         <select class="select-input" id="sf-report-scale">
@@ -3971,8 +3979,8 @@ async function saveSettings(){
   if(mwa) state.settings.managerWhatsApp = mwa.value.trim();
   state.settings.labAddress = document.getElementById('sf-address').value.trim();
   const lt = document.getElementById('sf-letter-top'), lb = document.getElementById('sf-letter-bottom');
-  if(lt) state.settings.letterTop = lt.value === '' ? 45 : Number(lt.value);
-  if(lb) state.settings.letterBottom = lb.value === '' ? 25 : Number(lb.value);
+  if(lt) state.settings.letterTop = lt.value === '' ? 62 : Number(lt.value);
+  if(lb) state.settings.letterBottom = lb.value === '' ? 57 : Number(lb.value);
   const rsEl = document.getElementById('sf-report-scale');
   if(rsEl) state.settings.reportFontPt = Number(rsEl.value);
   const rl = document.getElementById('sf-report-lang');
@@ -4236,11 +4244,11 @@ function buildReportHTML(orderId, resultsOnly){
 
       ${o.notes? `<p style="font-size:12.5px;margin-bottom:8px"><strong>${L.notes}</strong> ${escapeHtml(o.notes)}</p>` : ''}
 
-      <div class="doc-disclaimer" style="margin:14px 0 4px;padding:10px 14px;border:1px solid #E1E8EA;background:#F6F9F8;border-radius:8px;font-size:11.5px;color:#55666b;text-align:center;line-height:1.7">
+      ${resultsOnly ? '' : `<div class="doc-disclaimer" style="margin:14px 0 4px;padding:10px 14px;border:1px solid #E1E8EA;background:#F6F9F8;border-radius:8px;font-size:11.5px;color:#55666b;text-align:center;line-height:1.7">
         ${escapeHtml(L.disclaimer.replace('##LAB##', s.labName || 'مختبر مسك الطبي'))}
-      </div>
+      </div>`}
 
-      ${(s.labTechName||s.labTechLicense)? `
+      ${!resultsOnly && (s.labTechName||s.labTechLicense)? `
       <div class="doc-signature">
         <div>
           <div style="font-size:13px;font-weight:700">${escapeHtml(s.labTechName||'')}</div>
@@ -4381,8 +4389,8 @@ function printReport(orderId, resultsOnly, doctorChecked){
   let css = resultsOnly ? '' : pageFooterCSS(o);
   if(resultsOnly){
     const st = state.settings || {};
-    const top = Number(st.letterTop)>=0 && st.letterTop!=='' && st.letterTop!=null ? Number(st.letterTop) : 45;
-    const bot = Number(st.letterBottom)>=0 && st.letterBottom!=='' && st.letterBottom!=null ? Number(st.letterBottom) : 25;
+    const top = Number(st.letterTop)>=0 && st.letterTop!=='' && st.letterTop!=null ? Number(st.letterTop) : 62;
+    const bot = Number(st.letterBottom)>=0 && st.letterBottom!=='' && st.letterBottom!=null ? Number(st.letterBottom) : 57;
     css += `@page{ size:A4; margin:${top}mm 11mm ${bot}mm; }`;
   }
   modeStyle.textContent = css;
