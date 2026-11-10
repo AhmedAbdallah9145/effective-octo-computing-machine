@@ -4509,6 +4509,7 @@ async function captureElementAsPDF(html){
     // safe break points = bottoms of rows, section tables and blocks
     const cuts = [...container.querySelectorAll('tr, table, .patient-card, .doc-section, p, h1, h2, h3, img')]
       .map(el => Math.round(el.getBoundingClientRect().bottom - top0)).filter(y => y > 0 && y < total).sort((a,b)=>a-b);
+    const keeps = [...container.querySelectorAll('.doc-section.keep-whole')].map(el => { const r = el.getBoundingClientRect(); return [Math.floor(r.top - top0) - 2, Math.ceil(r.bottom - top0)]; });
     const pages = []; let start = 0;
     while(start < total - 2){
       const PAGE_H = usable(pages.length);
@@ -4516,6 +4517,8 @@ async function captureElementAsPDF(html){
       if(end < total){
         const c = cuts.filter(y => y > start + PAGE_H*0.5 && y <= start + PAGE_H);
         if(c.length) end = c[c.length-1];
+        // Blood / Urine sections are never split: if the cut falls inside one, start it on the next page
+        keeps.forEach(([kt, kb]) => { if(end > kt && end < kb && kt > start + 2 && (kb - kt) <= usable(pages.length + 1)) end = kt; });
       }
       pages.push([start, end]); start = end;
     }
