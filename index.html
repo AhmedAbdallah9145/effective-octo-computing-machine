@@ -491,7 +491,8 @@
   .lab-doc .doc-table tr{ break-inside:avoid; page-break-inside:avoid; }
   .lab-doc .doc-table thead{ display:table-header-group; }
   .lab-doc .doc-signature, .lab-doc .doc-footer{ break-inside:avoid; page-break-inside:avoid; }
-  .lab-doc.is-report .doc-title, .lab-doc.is-report .doc-meta, .lab-doc.is-report .patient-card{ break-after:avoid; page-break-after:avoid; }
+  .lab-doc.is-report .doc-title, .lab-doc.is-report .doc-meta{ break-after:avoid; page-break-after:avoid; }
+  .lab-doc.is-report .patient-card{ break-inside:avoid; page-break-inside:avoid; }
   .lab-doc.is-report .doc-table td.center{ font-weight:500; }
   .lab-doc.is-report .doc-table td.center.abn{ font-weight:900; }
 
@@ -505,6 +506,9 @@
     /* allow a long section to continue on the next page (header row repeats) instead of jumping whole to a new page */
     .lab-doc.is-report .doc-section{ break-inside:auto !important; page-break-inside:auto !important; overflow:visible !important; border-radius:0 !important; margin-bottom:calc(8px * var(--rs,1)) !important; }
     .lab-doc.is-report .doc-table tr{ break-inside:avoid; page-break-inside:avoid; }
+    /* Blood and Urine: the whole section stays on one page (moves to the next page if it does not fit),
+       with slightly tighter rows so a full CBC / urine analysis fits on a page */
+    .lab-doc.is-report .doc-section.keep-whole td{ padding-top:calc(1.6px * var(--rs,1)) !important; padding-bottom:calc(1.6px * var(--rs,1)) !important; line-height:1.2; }
     .lab-doc.is-report .doc-table thead{ display:table-header-group; }
     .lab-doc.is-report .doc-table tfoot{ display:table-footer-group; }
     .lab-doc.is-report .doc-table th{ padding:calc(3px * var(--rs,1)) calc(6px * var(--rs,1)) !important; }
@@ -4205,7 +4209,9 @@ function buildReportSections(o, gender, L){
     const cols = withPrev
       ? '<col style="width:5%"><col style="width:27%"><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:20%"><col style="width:11%">'
       : '<col style="width:6%"><col style="width:30%"><col style="width:16%"><col style="width:12%"><col style="width:22%"><col style="width:14%">';
-    return `<table class="doc-table doc-section">
+    // Blood (CBC / Hematology) and Urine are printed whole on one page — never split across pages
+    const keep = /^(hematology|haematology|urine|cbc|دم|بول|تحليل البول|أمراض الدم)$/i.test(String(cat).trim());
+    return `<table class="doc-table doc-section${keep?' keep-whole':''}">
       <colgroup>${cols}</colgroup>
       <thead>
         <tr class="doc-cat-row"><td colspan="${withPrev?7:6}" style="background:${c.bg};color:${c.fg}">${escapeHtml(cat)}</td></tr>
@@ -4395,9 +4401,59 @@ function printReport(orderId, resultsOnly, doctorChecked){
   }
   modeStyle.textContent = css;
   document.head.appendChild(modeStyle);
+  try{
+    const st = state.settings || {};
+    const top = resultsOnly ? (Number(st.letterTop)>=0 && st.letterTop!=='' && st.letterTop!=null ? Number(st.letterTop) : 62) : 9;
+    const bot = resultsOnly ? (Number(st.letterBottom)>=0 && st.letterBottom!=='' && st.letterBottom!=null ? Number(st.letterBottom) : 57) : 9;
+    keepSectionsWhole(297 - top - bot);
+  }catch(e){ console.warn('keepSectionsWhole', e); }
   const restoreTitle = () => { document.title = originalTitle; if(modeStyle) modeStyle.remove(); window.removeEventListener('afterprint', restoreTitle); };
   window.addEventListener('afterprint', restoreTitle);
   window.print();
+}
+/* Blood (Hematology) and Urine sections must print whole on ONE page.
+   Lays the report out with the print styles, then: a keep-whole section that does not fit in the
+   space left on the current page starts on a new page; one taller than a full page is scaled down to fit. */
+function keepSectionsWhole(pageMM){
+  const area = document.getElementById('print-area');
+  const doc = area && area.querySelector('.lab-doc.is-report');
+  if(!doc || !doc.querySelector('.doc-section.keep-whole')) return;
+  // print-only CSS rules, applied for a moment so the measurements match the printed page
+  let printCSS = '';
+  for(const sh of document.styleSheets){
+    let rules; try{ rules = sh.cssRules; }catch(e){ continue; }
+    for(const r of rules){ if(r.media && /print/.test(r.media.mediaText)) for(const ir of r.cssRules) printCSS += ir.cssText + '\n'; }
+  }
+  const tmp = document.createElement('style'); tmp.textContent = printCSS; document.head.appendChild(tmp);
+  const saved = area.getAttribute('style');
+  ['display:block','position:absolute','left:-20000px','top:0','width:188mm','visibility:hidden'].forEach(d=>{ const [k,v]=d.split(':'); area.style.setProperty(k,v,'important'); });
+  try{
+    const pxPerMM = 96/25.4, pageH = pageMM * pxPerMM * 0.985;   // small safety margin
+    const kids = [...doc.children].filter(el=>getComputedStyle(el).display!=='none');
+    let y = 0;
+    kids.forEach(el=>{
+      const cs = getComputedStyle(el);
+      const mt = parseFloat(cs.marginTop)||0, mb = parseFloat(cs.marginBottom)||0;
+      let h = el.getBoundingClientRect().height;
+      if(el.classList.contains('keep-whole')){
+        el.style.zoom = ''; el.style.breakBefore = '';
+        const left = pageH - y - mt;               // space left on the current page
+        if(h <= left){ y += mt + h + mb; return; }
+        // nearly fits: shrink a little to stay on this page (keeps blood/urine on page 1 under the patient card)
+        if(y > 0 && left / h >= 0.8){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; return; }
+        // otherwise start it on a new page, shrinking only if it is taller than a whole page
+        if(y > 0) el.style.breakBefore = 'page';
+        if(h > pageH){ el.style.zoom = Math.max(0.55, (pageH - 2) / h).toFixed(3); h = el.getBoundingClientRect().height; }
+        y = h + mb;
+      } else {
+        y += mt + h + mb;
+        while(y > pageH) y -= pageH;   // ordinary sections flow onto the next page
+      }
+    });
+  } finally {
+    if(saved==null) area.removeAttribute('style'); else area.setAttribute('style', saved);
+    tmp.remove();
+  }
 }
 function printInvoice(orderId){
   const o = state.orders.find(x=>x.id===orderId);
