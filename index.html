@@ -4977,7 +4977,54 @@ function performLogout(){
     });
   }
   await checkAuth();
+  startAutoUpdate();
 })();
+
+/* ===================== AUTO UPDATE =====================
+   Edits are published to the website, but a window that stays open keeps the old version.
+   Every few minutes (and when the window is brought back) check whether a new version is online;
+   if so, reload by itself when nobody is in the middle of something (no window/form open, not typing).
+   Otherwise show a small bar the user can tap to update. */
+function _verHash(t){ let h = 0; for(let i=0;i<t.length;i++){ h = (h*31 + t.charCodeAt(i)) | 0; } return t.length + ':' + h; }
+async function _fetchVer(){
+  try{
+    const r = await fetch('index.html?v=' + Date.now(), { cache:'no-store' });
+    if(!r.ok) return null;
+    return _verHash(await r.text());
+  }catch(e){ return null; }
+}
+function _isBusy(){
+  if(document.getElementById('overlay')?.classList.contains('open')) return true;
+  if(document.getElementById('doctor-ask')) return true;
+  const a = document.activeElement;
+  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !a.classList.contains('search-input')) return true;
+  return false;
+}
+function _showUpdateBar(){
+  if(document.getElementById('update-bar')) return;
+  const b = document.createElement('div');
+  b.id = 'update-bar';
+  b.textContent = '🔄 يوجد تحديث جديد للبرنامج — اضغط هنا للتحديث';
+  b.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:99999;background:#0E5E59;color:#fff;padding:10px 18px;border-radius:12px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.25);font-family:inherit';
+  b.onclick = () => location.reload();
+  document.body.appendChild(b);
+}
+async function startAutoUpdate(){
+  if(location.protocol === 'file:') return;
+  const mine = await _fetchVer();      // the version this window loaded
+  if(!mine) { setTimeout(startAutoUpdate, 60000); return; }
+  let pending = false;
+  const check = async () => {
+    if(!pending){
+      const now = await _fetchVer();
+      if(now && now !== mine) pending = true;
+    }
+    if(pending){ if(_isBusy()) _showUpdateBar(); else location.reload(); }
+  };
+  setInterval(check, 3 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') check(); });
+  window.addEventListener('focus', check);
+}
 </script>
 </body>
 </html>
