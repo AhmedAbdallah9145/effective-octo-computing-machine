@@ -4209,8 +4209,8 @@ function buildReportSections(o, gender, L){
     const cols = withPrev
       ? '<col style="width:5%"><col style="width:27%"><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:20%"><col style="width:11%">'
       : '<col style="width:6%"><col style="width:30%"><col style="width:16%"><col style="width:12%"><col style="width:22%"><col style="width:14%">';
-    // Blood (CBC / Hematology) and Urine are printed whole on one page — never split across pages
-    const keep = /^(hematology|haematology|urine|cbc|دم|بول|تحليل البول|أمراض الدم)$/i.test(String(cat).trim());
+    // Blood (CBC / Hematology), Urine and Culture (culture + its antibiotic sensitivity) are printed whole on one page — never split across pages
+    const keep = /^(hematology|haematology|urine|cbc|دم|بول|تحليل البول|أمراض الدم|(urine|pus|semen|stool|sputum|blood|throat|wound|vaginal|ear|eye) culture|زرع.*|مزرعة.*)$/i.test(String(cat).trim());
     return `<table class="doc-table doc-section${keep?' keep-whole':''}">
       <colgroup>${cols}</colgroup>
       <thead>
@@ -4430,7 +4430,7 @@ function keepSectionsWhole(pageMM){
   try{
     const pxPerMM = 96/25.4, pageH = pageMM * pxPerMM * 0.985;   // small safety margin
     const kids = [...doc.children].filter(el=>getComputedStyle(el).display!=='none');
-    let y = 0;
+    let y = 0, sectionOnPage = false;   // sectionOnPage: a results section is already on the current page
     kids.forEach(el=>{
       const cs = getComputedStyle(el);
       const mt = parseFloat(cs.marginTop)||0, mb = parseFloat(cs.marginBottom)||0;
@@ -4440,14 +4440,17 @@ function keepSectionsWhole(pageMM){
         const left = pageH - y - mt;               // space left on the current page
         if(h <= left){ y += mt + h + mb; return; }
         // nearly fits: shrink a little to stay on this page (keeps blood/urine on page 1 under the patient card)
-        if(y > 0 && left / h >= 0.8){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; return; }
+        if(y > 0 && left / h >= 0.8){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; sectionOnPage = true; return; }
+        // first results section under the patient card: shrink it to fit here rather than leave page 1 with only the header
+        if(y > 0 && !sectionOnPage && left / h >= 0.6){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; sectionOnPage = true; return; }
         // otherwise start it on a new page, shrinking only if it is taller than a whole page
         if(y > 0) el.style.breakBefore = 'page';
         if(h > pageH){ el.style.zoom = Math.max(0.55, (pageH - 2) / h).toFixed(3); h = el.getBoundingClientRect().height; }
-        y = h + mb;
+        y = h + mb; sectionOnPage = true;
       } else {
         y += mt + h + mb;
-        while(y > pageH) y -= pageH;   // ordinary sections flow onto the next page
+        while(y > pageH){ y -= pageH; sectionOnPage = false; }   // ordinary sections flow onto the next page
+        if(el.classList.contains('doc-section')) sectionOnPage = true;
       }
     });
   } finally {
