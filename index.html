@@ -888,6 +888,16 @@ async function loadState(){
     if(n) await save('tests');
     state.settings.addPthCalcitonin = true; await save('settings');
   }
+  if(state.settings && !state.settings.addTtgIgA){
+    // celiac / wheat-sensitivity test (tTG-IgA)
+    const key = x => ((x.nameEn||x.name||'')+'').trim().toLowerCase();
+    const nm = 'Anti-tTG IgA (Tissue Transglutaminase IgA)';
+    if(!state.tests.some(x=>key(x)===nm.toLowerCase() || (/ttg|transglut|سيلياك/.test(key(x)) && !/igg/.test(key(x))))){
+      const row = DEFAULT_TEST_CATALOG.find(r=>r[0]===nm);
+      if(row){ state.tests.push(Object.assign({ id: uid(), name: nm, nameEn: nm, category: row[1], price: 0 }, _rowRef(row))); await save('tests'); }
+    }
+    state.settings.addTtgIgA = true; await save('settings');
+  }
   if(state.settings && !state.settings.letterheadV2){
     // the printed Misk A4 letterhead: header to ~56mm, disclaimer/signature box from ~244mm
     if(state.settings.letterTop==null || Number(state.settings.letterTop)===45) state.settings.letterTop = 62;
@@ -2086,6 +2096,7 @@ const COMMON_TEST_TRANSLATIONS = [
   [['فيتامين ب12','vitamin b12','b12'], 'Vitamin B12'],
   [['حديد','iron'], 'Serum Iron'],
   [['فيريتين','ferritin'], 'Ferritin'],
+  [['حساسية القمح','سيلياك','ttg','transglutaminase'], 'Anti-tTG IgA (Tissue Transglutaminase IgA)'],
   [['كالسيوم'], 'Calcium'],
   [['صوديوم'], 'Sodium (Na)'],
   [['بوتاسيوم'], 'Potassium (K)'],
@@ -2342,6 +2353,8 @@ const DEFAULT_TEST_CATALOG = [
   ['Immunoglobulin M (IgM)','Immunology','mg/dL',40,230],
   ['Immunoglobulin A (IgA)','Immunology','mg/dL',70,400],
   ['Antinuclear Antibody (ANA)','Immunology','','','','Negative'],
+  ['Anti-tTG IgA (Tissue Transglutaminase IgA)','Immunology','U/mL','','','Negative: < 10 | Positive: ≥ 10'],
+  ['Anti-tTG IgG (Tissue Transglutaminase IgG)','Immunology','U/mL','','','Negative: < 10 | Positive: ≥ 10'],
   ['Total Bile Acids','Liver Function','µmol/L','','','< 10'],
   ['Fecal Calprotectin (Quantitative)','Stool','µg/g','','','< 50'],
   ['Fecal Calprotectin (Rapid)','Stool','','','','Negative'],
