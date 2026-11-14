@@ -4131,7 +4131,7 @@ function buildDocPatientCard(patient, o, L){
 
 /* Builds the per-test row cells shared by both documents.
    withPrice=true appends the price cell (invoice only). */
-function buildDocTestRow(tid, index, o, gender, withPrice, withPrev){
+function buildDocTestRow(tid, index, o, gender, withPrice, withPrev, shortName){
   const t = testById(tid); if(!t) return '';
   const r = (o.results && o.results[tid]) || {};
   const te = effTest(t, r);
@@ -4160,7 +4160,7 @@ function buildDocTestRow(tid, index, o, gender, withPrice, withPrev){
   const priceCell = withPrice ? `<td class="price-col">${fmtMoney((o.prices && o.prices[tid]!=null) ? o.prices[tid] : (t.price||0))}</td>` : '';
   return `<tr${isCritical?' class="flag-critical"':''}>
       <td>${index+1}</td>
-      <td><strong dir="ltr">${escapeHtml(testDisplayName(t))}</strong></td>
+      <td><strong dir="ltr">${escapeHtml(shortName ? testDisplayName(t).replace(/^(urine|pus|semen|stool|sputum|blood|throat|wound|vaginal|ear|eye) (culture|sensitivity)\s*-\s*/i,'') : testDisplayName(t))}</strong></td>
       <td class="center${abn?' abn':''}">${escapeHtml(r.value!=null && r.value!=='' ? r.value : '—')}${arrow}</td>
       ${prevCell}
       <td>${escapeHtml(te.unit||'—')}</td>
@@ -4205,7 +4205,9 @@ function buildReportSections(o, gender, L){
   let index = 0;
   return cats.map(cat=>{
     const c = categoryColor(cat);
-    const rows = byCat[cat].map(tid=> buildDocTestRow(tid, index++, o, gender, false, withPrev)).join('');
+    // culture sections: the section title already says e.g. "Urine Culture", so print just "Ciprofloxacin" instead of "Urine Sensitivity - Ciprofloxacin" (shorter rows, fits one page)
+    const isCulture = /culture$|^زرع|^مزرعة/i.test(String(cat).trim());
+    const rows = byCat[cat].map(tid=> buildDocTestRow(tid, index++, o, gender, false, withPrev, isCulture)).join('');
     const cols = withPrev
       ? '<col style="width:5%"><col style="width:27%"><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:20%"><col style="width:11%">'
       : '<col style="width:6%"><col style="width:30%"><col style="width:16%"><col style="width:12%"><col style="width:22%"><col style="width:14%">';
@@ -4442,7 +4444,7 @@ function keepSectionsWhole(pageMM){
         // nearly fits: shrink a little to stay on this page (keeps blood/urine on page 1 under the patient card)
         if(y > 0 && left / h >= 0.8){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; sectionOnPage = true; return; }
         // first results section under the patient card: shrink it to fit here rather than leave page 1 with only the header
-        if(y > 0 && !sectionOnPage && left / h >= 0.6){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; sectionOnPage = true; return; }
+        if(y > 0 && !sectionOnPage && left / h >= 0.5){ el.style.zoom = ((left - 2) / h).toFixed(3); y += mt + el.getBoundingClientRect().height + mb; sectionOnPage = true; return; }
         // otherwise start it on a new page, shrinking only if it is taller than a whole page
         if(y > 0) el.style.breakBefore = 'page';
         if(h > pageH){ el.style.zoom = Math.max(0.55, (pageH - 2) / h).toFixed(3); h = el.getBoundingClientRect().height; }
