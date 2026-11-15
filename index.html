@@ -1895,13 +1895,16 @@ function consumeKitsForOrder(o){
 let patientSearch = '';
 function renderPatients(){
   setTopbar('المرضى', 'سجل المرضى وبياناتهم', `<button class="btn btn-primary" onclick="openPatientModal()">+ إضافة مريض</button>`);
-  const list = state.patients.filter(p => !patientSearch || p.name.includes(patientSearch) || (p.phone||'').includes(patientSearch));
+  const _pn = v => String(v||'').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+  const q = _pn(patientSearch);
+  const list = state.patients.filter(p => !q || _pn(p.name).includes(q) || _pn(p.nameEn).includes(q) || String(p.phone||'').includes(q));
   document.getElementById('content').innerHTML = `
     <div class="card">
       <div class="card-body">
         <div class="toolbar">
           <input class="search-input" placeholder="بحث بالاسم أو رقم الهاتف..." value="${escapeHtml(patientSearch)}" oninput="patientSearch=this.value; renderPatients();">
-          <span style="color:var(--ink-soft);font-size:13px">${list.length} مريض</span>
+          ${patientSearch ? `<button class="btn btn-outline btn-sm" onclick="patientSearch=''; renderPatients();">✕ مسح البحث وعرض كل المرضى</button>` : ''}
+          <span style="color:var(--ink-soft);font-size:13px">${list.length} مريض${patientSearch ? ` من أصل ${state.patients.length}` : ''}</span>
         </div>
         <table>
           <thead><tr><th>الاسم</th><th>العمر</th><th>الجنس</th><th>الهاتف</th><th>تاريخ التسجيل</th><th></th></tr></thead>
@@ -4946,7 +4949,7 @@ async function saveNewPassword(){
   }catch(e){ showToast('تعذر تغيير كلمة المرور: ' + (e.message||'تأكد من الإنترنت')); }
 }
 
-function doLogout(){
+function doLogout(){ patientSearch = '';
   // Custom confirm dialog (the browser's confirm() is blocked/ignored in some installed-app contexts)
   const mb = document.getElementById('modal-box');
   mb.className = 'modal';
