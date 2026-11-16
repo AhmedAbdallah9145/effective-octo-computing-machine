@@ -4547,10 +4547,14 @@ async function captureElementAsPDF(html){
   const W = 780, PX = W / 210;                 // px per mm
   const TOP = i => i===0 ? 0 : 10, BOTTOM = 12; // mm margins (page 1 already has the report's own padding)
   const usable = i => Math.round((297 - TOP(i) - BOTTOM) * PX);
+  const FIT = 1.15;                              // a page may hold up to 15% more, drawn slightly smaller
   const container = document.createElement('div');
   container.innerHTML = html;
   Object.assign(container.style, { position:'fixed', top:'0', left:'0', zIndex:'-1', width: W+'px', background:'#ffffff', padding:'24px', boxSizing:'border-box' });
   container.dir = 'rtl';
+  container.classList.add('pdf-mode');
+  // the PDF uses the same compact report layout as the printed page (screen sizes leave page 1 half empty)
+  const pdfCSS = document.createElement('style'); pdfCSS.textContent = pdfReportCSS(); document.head.appendChild(pdfCSS);
   document.body.appendChild(container);
   try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
   await new Promise(r => setTimeout(r, 150));
@@ -4569,7 +4573,13 @@ async function captureElementAsPDF(html){
         const c = cuts.filter(y => y > start + PAGE_H*0.5 && y <= start + PAGE_H);
         if(c.length) end = c[c.length-1];
         // Blood / Urine sections are never split: if the cut falls inside one, start it on the next page
-        keeps.forEach(([kt, kb]) => { if(end > kt && end < kb && kt > start + 2 && (kb - kt) <= usable(pages.length + 1)) end = kt; });
+        keeps.forEach(([kt, kb]) => {
+          if(!(end > kt + 2 && end < kb - 2)) return;
+          if(kb - start <= PAGE_H * FIT) end = kb;                                    // nearly fits: keep it here, page printed slightly smaller
+          else if(kt > start + 2 && (kb - kt) <= usable(pages.length + 1)) end = kt;  // otherwise it starts the next page
+        });
+        // only a little is left over (e.g. the signature / footer): put it on this page too instead of a near-empty extra page
+        if(total - start <= PAGE_H * FIT) end = total;
       }
       pages.push([start, end]); start = end;
     }
@@ -4583,13 +4593,30 @@ async function captureElementAsPDF(html){
       const ctx = slice.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,slice.width,slice.height);
       ctx.drawImage(canvas, 0, Math.round(a*scale), canvas.width, slice.height, 0, 0, canvas.width, slice.height);
       if(i>0) pdf.addPage();
-      pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 0, TOP(i), 210, (b-a) / PX);
+      const hMM = (b-a) / PX, maxMM = 297 - TOP(i) - BOTTOM, k = Math.min(1, maxMM / hMM);   // over-full page: scale it down to fit
+      pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - 210*k) / 2, TOP(i), 210*k, hMM*k);
       if(pages.length>1){ pdf.setFontSize(8); pdf.setTextColor(140); pdf.text(`${i+1} / ${pages.length}`, 105, 292, { align:'center' }); }
     });
     return pdf.output('blob');
   } finally {
     document.body.removeChild(container);
+    pdfCSS.remove();
   }
+}
+/* The report's print-only layout rules (@media print), re-scoped to the off-screen PDF container */
+function pdfReportCSS(){
+  let css = '';
+  for(const sh of document.styleSheets){
+    let rules; try{ rules = sh.cssRules; }catch(e){ continue; }
+    for(const r of rules){
+      if(!(r.media && /print/.test(r.media.mediaText))) continue;
+      for(const ir of r.cssRules){
+        if(!ir.selectorText || !/is-report/.test(ir.selectorText)) continue;
+        css += ir.selectorText.split(',').map(x=>'.pdf-mode ' + x.trim()).join(', ') + '{' + ir.style.cssText + '}\n';
+      }
+    }
+  }
+  return css;
 }
 /* Opening WhatsApp on a computer: the installed app opens links in a tiny pop-up, too small for
    WhatsApp Web's login code. So each device chooses once: the WhatsApp desktop app, or WhatsApp Web in a full-size window. */
