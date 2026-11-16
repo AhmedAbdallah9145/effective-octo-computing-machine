@@ -1289,6 +1289,13 @@ function formatAge(p, lang){
   if(n>=3 && n<=10) return `${n} ${ar[2]}`;
   return `${n} ${ar[3]}`;
 }
+function patientsNewestFirst(){
+  // أحدث مريض مسجَّل يظهر أولاً (حسب تاريخ التسجيل، ثم ترتيب الإضافة)
+  return state.patients.map((p,i)=>({p,i})).sort((a,b)=>{
+    const d = String(b.p.createdAt||'').localeCompare(String(a.p.createdAt||''));
+    return d || (b.i - a.i);
+  }).map(x=>x.p);
+}
 function patientName(id){ const p=state.patients.find(p=>p.id===id); return p? p.name : '—'; }
 function testById(id){ return state.tests.find(t=>t.id===id); }
 /* Tests are displayed by their English name only, per lab convention.
@@ -1897,7 +1904,7 @@ function renderPatients(){
   setTopbar('المرضى', 'سجل المرضى وبياناتهم', `<button class="btn btn-primary" onclick="openPatientModal()">+ إضافة مريض</button>`);
   const _pn = v => String(v||'').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
   const q = _pn(patientSearch);
-  const list = state.patients.filter(p => !q || _pn(p.name).includes(q) || _pn(p.nameEn).includes(q) || String(p.phone||'').includes(q));
+  const list = patientsNewestFirst().filter(p => !q || _pn(p.name).includes(q) || _pn(p.nameEn).includes(q) || String(p.phone||'').includes(q));
   document.getElementById('content').innerHTML = `
     <div class="card">
       <div class="card-body">
@@ -2893,7 +2900,7 @@ function openOrderModal(preselectPatientId){
       <div class="field"><label>المريض *</label>
         <select class="select-input" id="of-patient">
           <option value="">— اختر مريض —</option>
-          ${state.patients.map(p=>`<option value="${p.id}" ${preselectPatientId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+          ${patientsNewestFirst().map(p=>`<option value="${p.id}" ${preselectPatientId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
         </select>
       </div>
       <div class="field"><label>محوَّل من (Referred by) — اكتب اسم الطبيب أو اختر من الخيارات</label>
